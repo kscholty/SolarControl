@@ -4,6 +4,7 @@
  * \version 0.1
  * \date November 2018
  */
+#ifdef IGNORE
 
 #include "BMS.hpp"
 
@@ -422,3 +423,5 @@ float BMS::converUint32ToFloat(uint32_t number)
 	sample.uint32t = number;
 	return sample.f;
 }
+
+#endif

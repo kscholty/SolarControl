@@ -4,7 +4,7 @@
  * \version 0.1
  * \date November 2018
  */
-
+#if IGNORE
 #ifndef BMS_HPP_
 #define BMS_HPP_
 
@@ -209,3 +209,5 @@ private:
 };
 
 #endif /* BMS_HPP_ */
+
+#endif
