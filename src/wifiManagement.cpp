@@ -8,16 +8,14 @@
 #include <DNSServer.h>
 #include <WebServer.h>
 
+#include <IotWebConf.h>
+#include <IotWebConfUsing.h> // This loads aliases for easier class names.
 
 #include "wifimanagement.h"
 #include "blynkmanagement.h"
 #include "mqttmanagement.h"
+#include "common.h"
 
-#include <IotWebConf.h>
-#include <IotWebConfUsing.h> // This loads aliases for easier class names.
-
-// -- Initial name of the Thing. Used e.g. as SSID of the own Access Point.
-const char thingName[] = "SolarGridController";
 
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
 const char wifiInitialApPassword[] = "123456";
@@ -26,7 +24,7 @@ const char wifiInitialApPassword[] = "123456";
 #define NUMBER_LEN 32
 
 // -- Configuration specific key. The value should be modified if config structure was changed.
-#define CONFIG_VERSION "S0"
+#define CONFIG_VERSION "S1"
 
 // -- When CONFIG_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
@@ -54,15 +52,24 @@ IotWebConf iotWebConf(thingName, &dnsServer, &server, wifiInitialApPassword, CON
 
 IotWebConfParameterGroup blynkGroup = IotWebConfParameterGroup("Blynk configuration");
 IotWebConfTextParameter blynkTokenParam = IotWebConfTextParameter("Blynk Token", "blynkToken", blynkTokenValue, BLYNK_STRLEN);
-IotWebConfTextParameter blynkServerParam = IotWebConfTextParameter("Blynk server", "blynkServer", blynkServerValue, STRING_LEN,"","nextcloud.home.lan");
-IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, STRING_LEN,"", "9443");
+IotWebConfTextParameter blynkServerParam = IotWebConfTextParameter("Blynk server", "blynkServer", blynkServerValue, STRING_LEN, blynkServerValue);
+IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, STRING_LEN, blynkPortValue);
 
 IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("MQTT configuration");
-IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server", "mqttServer", mqttServerValue, STRING_LEN,"", "fhem.home.lan");
-IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, STRING_LEN,"","1883");
+IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server", "mqttServer", mqttServerValue, STRING_LEN, mqttServerValue);
+IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, STRING_LEN, mqttPortValue);
 IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("MQTT user", "mqttUser", mqttUserNameValue, STRING_LEN);
 IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("MQTT password", "mqttPass", mqttUserPasswordValue, STRING_LEN);
 
+IotWebConfTextParameter mqttEm3NameParam = IotWebConfPasswordParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
+IotWebConfTextParameter mqttEm3TopicParam = IotWebConfPasswordParameter("EM3 Topic", "em3topic", mqttEM3Topic, STRING_LEN, mqttEM3Topic);
+
+
+void wifiConnected()
+{
+  mqttReconnect();
+  blynkReconnect();
+}
 
 void wifiSetup()
 {
@@ -75,6 +82,8 @@ void wifiSetup()
   mqttGroup.addItem(&mqttPortParam);
   mqttGroup.addItem(&mqttUserNameParam);
   mqttGroup.addItem(&mqttUserPasswordParam);
+  mqttGroup.addItem(&mqttEm3NameParam);
+  mqttGroup.addItem(&mqttEm3TopicParam);
 
   iotWebConf.setStatusPin(STATUS_PIN);
   iotWebConf.setConfigPin(CONFIG_PIN);
@@ -82,6 +91,9 @@ void wifiSetup()
   iotWebConf.addParameterGroup(&mqttGroup);
   iotWebConf.addParameterGroup(&blynkGroup);
   iotWebConf.setConfigSavedCallback(&configSaved);
+  iotWebConf.setWifiConnectionCallback(&wifiConnected);
+
+
   iotWebConf.setFormValidator(&formValidator);
   iotWebConf.getApTimeoutParameter()->visible = true;
 
@@ -94,9 +106,6 @@ void wifiSetup()
   server.onNotFound([]() { iotWebConf.handleNotFound(); });
 
   Serial.println("Ready.");
-}
-void wifiReconect() {
-
 }
 
 void wifiLoop()

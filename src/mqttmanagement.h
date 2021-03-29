@@ -11,3 +11,7 @@ extern char mqttUserPasswordValue[STRING_LEN];
 
 extern void mqttSetup();
 extern void mqttLoop();
+extern void mqttReconnect();
+
+extern char mqttEM3Name[STRING_LEN];
+extern char mqttEM3Topic[STRING_LEN];

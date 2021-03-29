@@ -7,4 +7,5 @@ extern char blynkServerValue[BLYNK_STRLEN];
 extern char blynkPortValue[BLYNK_STRLEN];
 
 extern void blynkSetup();
+extern void blynkReconnect();
 extern void blynkLoop();

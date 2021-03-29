@@ -2,34 +2,54 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 
-#define STRING_LEN 128
-
-
+#include "common.h"
 
 char mqttServerValue[STRING_LEN] = "fhem.home.lan";
 char mqttPortValue[STRING_LEN] = "1883";
 char mqttUserNameValue[STRING_LEN];
 char mqttUserPasswordValue[STRING_LEN];
 
+char mqttEM3Name[STRING_LEN] = "shellyem3-8CAAB561991E";
+char mqttEM3Topic[STRING_LEN] = "/emeter/+/power";
+
 WiFiClient ethClient;
 PubSubClient mqttClient(ethClient);
 long lastReconnectAttempt = 0;
 
-boolean reconnect()
+boolean mqttReconnect()
 {
-    if (mqttClient.connect("arduinoClient"))
+    Serial.println("Entering mqqtReconnect");
+    if (WiFi.isConnected() && mqttClient.connect(thingName))
     {
         // Once connected, publish an announcement...
-        mqttClient.publish("outTopic", "hello world");
+        mqttClient.publish(thingName, "connected");
         // ... and resubscribe
-        mqttClient.subscribe("inTopic");
+        String subscription("shellies/");
+        subscription += mqttEM3Name;
+        subscription += mqttEM3Topic;
+
+        Serial.println("Subscribing to ");
+        Serial.println(subscription);
+
+        if (!mqttClient.subscribe(subscription.c_str()))
+        {
+            Serial.print("MQQT Subscribe failed\n Topic:");
+            Serial.println(subscription);
+        }
     }
     return mqttClient.connected();
 }
 
 void mqttHandleMessage(char *topic, byte *payload, unsigned int length)
 {
-    // handle message arrived
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+    for (int i = 0; i < length; i++)
+    {
+        Serial.print((char)payload[i]);
+    }
+    Serial.println();
 }
 
 void mqttSetup() {
@@ -41,14 +61,14 @@ void mqttSetup() {
 }
 
 void mqttLoop() {
-    if (!mqttClient.connected() && WiFi.isConnected())
+    if (!mqttClient.connected())
     {
         long now = millis();
         if (now - lastReconnectAttempt > 5000)
         {
             lastReconnectAttempt = now;
             // Attempt to reconnect
-            if (reconnect())
+            if (mqttReconnect())
             {
                 lastReconnectAttempt = 0;
             }
