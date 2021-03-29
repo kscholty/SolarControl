@@ -14,7 +14,7 @@
 #include "wifimanagement.h"
 #include "blynkmanagement.h"
 #include "mqttmanagement.h"
-#include "common.h"
+#include "inverterManagement.h"
 
 
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
@@ -28,7 +28,7 @@ const char wifiInitialApPassword[] = "123456";
 
 // -- When CONFIG_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
-#define CONFIG_PIN 32
+#define CONFIG_PIN  13
 
 // -- Status indicator pin.
 //      First it will light up (kept LOW), on Wifi connection it will blink,
@@ -60,10 +60,12 @@ IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server",
 IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, STRING_LEN, mqttPortValue);
 IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("MQTT user", "mqttUser", mqttUserNameValue, STRING_LEN);
 IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("MQTT password", "mqttPass", mqttUserPasswordValue, STRING_LEN);
-
 IotWebConfTextParameter mqttEm3NameParam = IotWebConfPasswordParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
 IotWebConfTextParameter mqttEm3TopicParam = IotWebConfPasswordParameter("EM3 Topic", "em3topic", mqttEM3Topic, STRING_LEN, mqttEM3Topic);
 
+IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
+IotWebConfTextParameter inverterTargetValueParam = IotWebConfPasswordParameter("Inverter Target [W]", "invTarget", gInverterTimeoutValue, STRING_LEN, gInverterTimeoutValue);
+IotWebConfTextParameter inverterTimeoutParam = IotWebConfPasswordParameter("Inverter Timeout [ms]", "invTimeout", gInverterTargetValue, STRING_LEN, mqttEM3Topic);
 
 void wifiConnected()
 {
@@ -85,11 +87,16 @@ void wifiSetup()
   mqttGroup.addItem(&mqttEm3NameParam);
   mqttGroup.addItem(&mqttEm3TopicParam);
 
+  inverterGroup.addItem(&inverterTargetValueParam);
+  inverterGroup.addItem(&inverterTimeoutParam);
+
   iotWebConf.setStatusPin(STATUS_PIN);
   iotWebConf.setConfigPin(CONFIG_PIN);
 
   iotWebConf.addParameterGroup(&mqttGroup);
   iotWebConf.addParameterGroup(&blynkGroup);
+  iotWebConf.addParameterGroup(&inverterGroup);
+
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
 
@@ -99,6 +106,7 @@ void wifiSetup()
 
   // -- Initializing the configuration.
   iotWebConf.init();
+  
 
   // -- Set up required URL handlers on the web server.
   server.on("/", handleRoot);
@@ -108,7 +116,7 @@ void wifiSetup()
   Serial.println("Ready.");
 }
 
-void wifiLoop()
+void wifiLoop(long now)
 {
   // -- doLoop should be called as frequently as possible.
   iotWebConf.doLoop();
@@ -179,5 +187,18 @@ bool formValidator()
     mqttServerParam.errorMessage = "Blynk token has to have length 32";
     valid = false;
   }
+
+  if (server.arg(inverterTargetValueParam.getId()).toInt() < 0)
+  {
+    mqttServerParam.errorMessage = "Inverter Target Value must be a positive number";
+    valid = false;
+  }
+
+  if (server.arg(inverterTimeoutParam.getId()).toInt() < 10000)
+  {
+    mqttServerParam.errorMessage = "Inverter Timeout Value must be >= 10000";
+    valid = false;
+  }
+  
   return valid;
 }

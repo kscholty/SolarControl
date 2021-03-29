@@ -8,4 +8,4 @@ extern char blynkPortValue[BLYNK_STRLEN];
 
 extern void blynkSetup();
 extern void blynkReconnect();
-extern void blynkLoop();
+extern void blynkLoop(long);

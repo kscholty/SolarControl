@@ -8,7 +8,7 @@ void blynkSetup() {
 
 }
 
-void blynkLoop() {
+void blynkLoop(long now) {
 
 }
 

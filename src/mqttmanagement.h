@@ -2,7 +2,7 @@
 
 #pragma once
 
-#define STRING_LEN 128
+#include "common.h"
 
 extern char mqttServerValue[STRING_LEN];
 extern char mqttPortValue[STRING_LEN];
@@ -10,7 +10,7 @@ extern char mqttUserNameValue[STRING_LEN];
 extern char mqttUserPasswordValue[STRING_LEN];
 
 extern void mqttSetup();
-extern void mqttLoop();
+extern void mqttLoop(long);
 extern void mqttReconnect();
 
 extern char mqttEM3Name[STRING_LEN];
