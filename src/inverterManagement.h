@@ -22,6 +22,9 @@ extern bool gInverterShutdown;
 // Initializes the inverter. It starts wit 0 output
 extern void inverterSetup();
 
+// This sets the morst urgent pins
+extern void inverterPreInit();
+
 // Controls the inverter via output pin.
 // Parameter is the current millis()
 extern void inverterLoop(long);

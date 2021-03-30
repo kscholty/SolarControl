@@ -10,11 +10,12 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
   Serial.println("Starting up...");
-  inverterSetup();
+
+  inverterPreInit();
   wifiSetup();
+  inverterSetup();
   mqttSetup();
   blynkSetup();
-  inverterSetup();
 }
 
 void loop() {

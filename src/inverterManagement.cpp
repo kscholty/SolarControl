@@ -18,13 +18,16 @@ static int inverterTarget = 30;
 static long inverterTimeout = 60000;
 static uint8_t pinValue;
 
-void inverterSetup() {
-    // Set the required output pin and make sure we don't start
-    // regulating power until we get input from grit power sensor
+void inverterPreInit() 
+{
     pinMode(INVERTERPIN, OUTPUT);
-    digitalWrite(INVERTERPIN,LOW);
+    digitalWrite(INVERTERPIN, LOW);
     inverterLock();
+}
 
+void inverterSetup() {
+
+    inverterPreInit();
     inverterTarget = atoi(gInverterTargetValue);
     inverterTimeout = atol(gInverterTimeoutValue);
     if(inverterTimeout < 10000) {
