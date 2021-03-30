@@ -64,8 +64,8 @@ IotWebConfTextParameter mqttEm3NameParam = IotWebConfPasswordParameter("EM3 Name
 IotWebConfTextParameter mqttEm3TopicParam = IotWebConfPasswordParameter("EM3 Topic", "em3topic", mqttEM3Topic, STRING_LEN, mqttEM3Topic);
 
 IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
-IotWebConfTextParameter inverterTargetValueParam = IotWebConfPasswordParameter("Inverter Target [W]", "invTarget", gInverterTimeoutValue, STRING_LEN, gInverterTimeoutValue);
-IotWebConfTextParameter inverterTimeoutParam = IotWebConfPasswordParameter("Inverter Timeout [ms]", "invTimeout", gInverterTargetValue, STRING_LEN, mqttEM3Topic);
+IotWebConfTextParameter inverterTargetValueParam = IotWebConfPasswordParameter("Inverter Target [W]", "invTarget", gInverterTargetValue, STRING_LEN, gInverterTargetValue);
+IotWebConfTextParameter inverterTimeoutParam = IotWebConfPasswordParameter("Inverter Timeout [ms]", "invTimeout", gInverterTimeoutValue, STRING_LEN, gInverterTimeoutValue);
 
 void wifiConnected()
 {

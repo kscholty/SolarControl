@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+#define INVERTERPIN 4
+
 // The values for the three grid legs
 extern float gGridLegsPower[3];
 

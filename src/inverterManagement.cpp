@@ -4,7 +4,11 @@
 
 #include "inverterManagement.h"
 
-#define INVERTERPIN 4 
+#if DEBUG
+#include "mqttmanagement.h"
+
+int lastModification = 0;
+#endif 
 
 char gInverterTargetValue[STRING_LEN]="30";
 char gInverterTimeoutValue[STRING_LEN] = "60000";
@@ -52,12 +56,30 @@ void inverterLoop(long now) {
     if (!inverterLocked())
     {
         // Here the whole magic happenes :-)
-        pinValue = gGridSumPower > inverterTarget ? LOW : HIGH;
+        pinValue = (int)gGridSumPower > inverterTarget ? HIGH : LOW;
     }
     else
     {
         pinValue = LOW;
     }
     digitalWrite(INVERTERPIN, pinValue);
+
+#if DEBUG
+    if(!mqttEnabled() && (now-lastModification> 19)) {        
+        lastModification = now;
+        // If pin is low, the consumption on the grid is ecpected to rise
+        // If it i high, if is high, expected to decrease, since the inverter produces more.
+        gGridSumPower = (pinValue == LOW) ? (gGridSumPower + 1.0) : (gGridSumPower - 1.0);
+        
+        if(now-gInverterLastUpdateReceived > 999) {
+        Serial.print(inverterTarget);
+        Serial.print(" : ");
+        Serial.print(gGridSumPower);
+        Serial.print(" : ");
+        Serial.println((int)pinValue);
+        gInverterLastUpdateReceived = now;
+        }
+    }
+#endif
 }
 

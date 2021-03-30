@@ -4,6 +4,9 @@
 
 #include "common.h"
 #include "inverterManagement.h"
+#include "mqttmanagement.h"
+
+
 
 char mqttServerValue[STRING_LEN] = "fhem.home.lan";
 char mqttPortValue[STRING_LEN] = "1883";
@@ -20,8 +23,31 @@ PubSubClient mqttClient(ethClient);
 
 static long lastReconnectAttempt = 0;
 
+#if DEBUG
+static bool _mqttEnabled = true;
 
-boolean mqttReconnect()
+void mqttDisable()
+{
+    if (_mqttEnabled)
+    {
+        Serial.println("Disabling mqtt");
+        _mqttEnabled = false;
+        mqttClient.disconnect();
+    }
+}
+
+void mqttEnable() {
+    if(!_mqttEnabled) {
+        Serial.println("Enabling mqtt");
+        _mqttEnabled = true;
+        mqttReconnect();
+    }
+}
+
+bool mqttEnabled() { return _mqttEnabled; }
+#endif
+
+bool mqttReconnect()
 {
     if (WiFi.isConnected() && mqttClient.connect(thingName))
     {
@@ -117,15 +143,20 @@ void mqttSetup() {
 }
 
 void mqttLoop(long now) {
-    if (!mqttClient.connected())
-    {        
-        if (now - lastReconnectAttempt > 5000)
+    if (!mqttClient.connected() )
+    {
+#if DEBUG        
+        if (_mqttEnabled)
+#endif        
         {
-            lastReconnectAttempt = now;
-            // Attempt to reconnect
-            if (mqttReconnect())
+            if (now - lastReconnectAttempt > 5000)
             {
-                lastReconnectAttempt = 0;
+                lastReconnectAttempt = now;
+                // Attempt to reconnect
+                if (mqttReconnect())
+                {
+                    lastReconnectAttempt = 0;
+                }
             }
         }
     }
