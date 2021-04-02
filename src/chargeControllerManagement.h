@@ -31,4 +31,3 @@ enum ChargerFlags_t
 extern unsigned int chargerValues[NUM_CHARGERS][NUM_CHARGER_VALUES];
 
 extern void chargeControllerSetup();
-extern void chargeControllerLoop(unsigned long);

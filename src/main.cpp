@@ -44,7 +44,6 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   wifiLoop(now);
-  chargeControllerLoop(now);
   blynkLoop(now);
 }
 

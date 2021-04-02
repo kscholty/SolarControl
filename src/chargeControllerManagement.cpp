@@ -4,6 +4,7 @@
 
 
 #define BOUDRATE 115200
+#define MK_32(LOW,HIGH) (( ((int32_t)(HIGH)) <<16)|(LOW))
 
 static const uint8_t chargerModbusAdresses[NUM_CHARGERS] = {1, 2};
 ModbusMaster charger[NUM_CHARGERS];
@@ -14,12 +15,11 @@ ModbusMaster charger[NUM_CHARGERS];
 // will be the real interval
 // So NUM_CAHRGERS*updateIntervalMilis is the frequency for each one.
 static unsigned long updateIntervalMilis = 1000;
-static unsigned long lastUpdateAt = 0;
 static unsigned int nextController = 0;
 
 unsigned int chargerValues[NUM_CHARGERS][NUM_CHARGER_VALUES];
 
-void chargeControllerSetup()
+void chargeControllerSetupCotroller()
 {
     Serial.begin(BOUDRATE);
     for (int i = 0; i < NUM_CHARGERS; ++i)
@@ -35,13 +35,60 @@ void updateController(uint index)
     Serial.print("Updating controller ");
     Serial.println(index + 1);
 #endif
+
+    uint8_t result = charger[index].readInputRegisters(0x3100, 8);
+
+    if (result == charger[index].ku8MBSuccess)
+    {
+
+        chargerValues[index][PV_VOLTAGE] = charger[index].getResponseBuffer(0x00);
+#if DEBUG
+        Serial.print("PV Voltage: ");
+        Serial.println(chargerValues[index][PV_VOLTAGE]);
+#endif
+        chargerValues[index][PV_CURRENT] = charger[index].getResponseBuffer(0x01);
+#if DEBUG
+        Serial.print("PV Current: ");
+        Serial.println(chargerValues[index][PV_CURRENT]);
+#endif
+        chargerValues[index][PV_POWER] = MK_32(charger[index].getResponseBuffer(0x02),charger[index].getResponseBuffer(0x03));
+#if DEBUG
+        Serial.print("PV Power: ");
+        Serial.println(chargerValues[index][PV_POWER]);
+#endif
+        chargerValues[index][BATT_VOLTAGE] = charger[index].getResponseBuffer(0x04);
+#if DEBUG
+        Serial.print("Battery Voltage: ");
+        Serial.println(chargerValues[index][BATT_VOLTAGE]);
+#endif
+        chargerValues[index][BATTERY_CHARGE_CURRENT] = charger[index].getResponseBuffer(0x05);
+#if DEBUG
+        Serial.print("Battery Charge Current: ");
+        Serial.println(chargerValues[index][BATTERY_CHARGE_CURRENT]);
+#endif
+        chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(charger[index].getResponseBuffer(0x06), charger[index].getResponseBuffer(0x07));
+#if DEBUG
+        Serial.print("PV Power: ");
+        Serial.println(chargerValues[index][PV_POWER]);
+#endif
+    }
 }
 
-void chargeControllerLoop(unsigned long now)
-{
-    if (now - lastUpdateAt > updateIntervalMilis) {
-        lastUpdateAt = now;
+
+void chargeControllerThradFunc(void*) {
+    TickType_t previousTime = xTaskGetTickCount();
+    chargeControllerSetupCotroller();
+    while(true) {
+        vTaskDelayUntil(&previousTime, updateIntervalMilis / portTICK_PERIOD_MS);
         updateController(nextController);
         nextController = (nextController + 1) % NUM_CHARGERS;
     }
 }
+
+void chargeControllerSetup()
+{
+    TaskHandle_t taskId;
+    xTaskCreate(chargeControllerThradFunc, "chrgCntrl", 1024, 0, 1, &taskId);
+}
+
+
