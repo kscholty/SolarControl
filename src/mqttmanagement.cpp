@@ -17,6 +17,7 @@ char mqttEM3Name[STRING_LEN] = "shellyem3-8CAAB561991E";
 int mqttEM3NameLength = 0;
 
 char mqttEM3Topic[STRING_LEN] = "/emeter/+/power";
+static int legPosInMessage = -1;
 
 WiFiClient ethClient;
 PubSubClient mqttClient(ethClient);
@@ -60,7 +61,7 @@ bool mqttReconnect()
 
         Serial.println("Subscribing to ");
         Serial.println(subscription);
-
+        
         if (!mqttClient.subscribe(subscription.c_str()))
         {
             Serial.print("MQQT Subscribe failed\n Topic:");
@@ -70,19 +71,17 @@ bool mqttReconnect()
     return mqttClient.connected();
 }
 
-static void parseEm3Result(const char *txt, const char *payload, int namePos)
+static void parseEm3Result(const char *txt, const char *payload)
 {
-    // We found the name of the EM3 in the topic
-    // We now need the number in the topic
-    // It should be at position name.length()+lengthOf("/emeter/")
-    int aLeg = txt[namePos+mqttEM3NameLength + 8] - 48;
+    
+    int aLeg = txt[legPosInMessage] - 48;
     float aValue = atof(payload);
 
         if( aLeg <0 || aLeg > 2 || aValue == 0.0 )
         {
 #if DEBUG
             Serial.println("Could not parse message from EM3");
-            Serial.print(txt[namePos + mqttEM3NameLength + 8]);
+            Serial.print(txt[legPosInMessage]);
             Serial.print(" : ");
             Serial.println(payload);
             Serial.print(aLeg);
@@ -120,10 +119,10 @@ void mqttHandleMessage(const char *topic, byte *payload, unsigned int length)
     String txt(topic);
     char value[length+1];
     int namePos = txt.indexOf(mqttEM3Name, 9);
-    if(namePos >= 0 && length > 0) {             
+    if(namePos >= 0 && length > 0 && legPosInMessage >= 0) {             
         memcpy(value,payload,length);
         value[length]=0;
-        parseEm3Result(topic, value, namePos);
+        parseEm3Result(topic, value);
     } 
 #if DEBUG
     else {
@@ -137,12 +136,20 @@ void mqttSetup() {
     int port = String(mqttPortValue).toInt();
     if(port == 0) port = 1883;
     mqttEM3NameLength = strlen(mqttEM3Name);
+    const char *position = strchr(mqttEM3Topic, '+');
+    if (position) {
+        legPosInMessage = (position - mqttEM3Topic) + mqttEM3NameLength + 9; // 9 is the lenth of "shellies/"
+    } else {
+        legPosInMessage = -1;
+    }
 
     mqttClient.setServer(mqttServerValue, port);
     mqttClient.setCallback(mqttHandleMessage);
+    
 }
 
-void mqttLoop(long now) {
+void mqttLoop(unsigned long now)
+{
     if (!mqttClient.connected() )
     {
 #if DEBUG        
@@ -165,6 +172,4 @@ void mqttLoop(long now) {
         // Client connected
         mqttClient.loop();        
     }
-
-    
 }

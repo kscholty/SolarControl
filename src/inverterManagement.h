@@ -29,7 +29,7 @@ extern void inverterPreInit();
 
 // Controls the inverter via output pin.
 // Parameter is the current millis()
-extern void inverterLoop(long);
+extern void inverterLoop(unsigned long);
 
 // Parameters for the web config to store results in
 extern char gInverterTargetValue[STRING_LEN];

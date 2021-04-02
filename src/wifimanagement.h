@@ -4,5 +4,5 @@
 
 extern void wifiSetup();
 extern void wifiReconnect();
-extern void wifiLoop(long);
+extern void wifiLoop(unsigned long);
 

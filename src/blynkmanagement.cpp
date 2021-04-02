@@ -1,6 +1,7 @@
 #include "blynkmanagement.h"
 #include "inverterManagement.h"
 #include "mqttmanagement.h"
+#include "chargeControllerManagement.h"
 
 #define BLYNK_SEND_ATOMIC
 
@@ -12,16 +13,17 @@
 #include <Blynk/BlynkProtocol.h>
 #include <Adapters/BlynkArduinoClient.h>
 #include <WiFi.h>
-#include <esp_timer.h>
+
 
 char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
 char blynkPortValue[BLYNK_STRLEN] = "80";
 static long lastReconnectAttempt = 0;
 static long blynkUpdateInterval = 5000;
-static esp_timer_handle_t updateTimerhandle;
+static SimpleTimer blynkUpdateTimer;
 
-    class BlynkWifi
+
+class BlynkWifi
     : public BlynkProtocol<BlynkArduinoClient>
 {
     typedef BlynkProtocol<BlynkArduinoClient> Base;
@@ -55,19 +57,29 @@ static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
 BlynkWifi Blynk(_blynkTransport);
 
 
-#include <BlynkWidgets.h>
+//#include <BlynkWidgets.h>
 
-void blynkUpdateAll(void *)
+void blynkUpdateGrid()
 {
 #if DEBUG
-    Serial.println("Updating Blynk");
+    Serial.println("Updating grid data on Blynk");
 #endif
-    Blynk.virtualWrite(V0, gGridLegsPower[0]);
-    Blynk.virtualWrite(V1, gGridLegsPower[1]);
-    Blynk.virtualWrite(V2, gGridLegsPower[2]);
-    Blynk.virtualWrite(V3, gGridSumPower);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegsPower[0]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegsPower[1]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegsPower[2]);
+    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumPower);
 }
 
+void blynkUpdateChargeController() {
+    static int index = 0;
+#if DEBUG
+    Serial.print("Updating charge controller "); Serial.print(index+1); Serial.println(" data on Blynk");
+#endif    
+    for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i) {
+        Blynk.virtualWrite(BLYNK_CHARGER_PIN(index,i),chargerValues[index][i]);
+    }
+    index = (index+1) % NUM_CHARGERS;
+}
 
 void blynkSetup()
 {
@@ -77,13 +89,16 @@ void blynkSetup()
         Blynk.config(blynkTokenValue, blynkServerValue, atoi(blynkPortValue));
     }
 
-    esp_timer_create_args_t aArgs;
-    aArgs.callback = blynkUpdateAll;
-    aArgs.arg = 0;
-    aArgs.name = "BlynkUpdate";
-    aArgs.dispatch_method = ESP_TIMER_TASK;
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateGrid) <0 ) {
+        Serial.println("Cannot create blynk grit update timer");
+    }
 
-    esp_timer_create(&aArgs, &updateTimerhandle);
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval / NUM_CHARGERS, blynkUpdateChargeController) < 0)
+    {
+        Serial.println("Cannot create blynk charge controller 1 timer");
+    }
+    
+    blynkUpdateTimer.disableAll();
 }
 
 
@@ -94,13 +109,17 @@ bool isValid() {
 BLYNK_CONNECTED() {
 #if DEBUG
     Serial.println("Blynk connected");
-    Blynk.virtualWrite(V50,mqttEnabled() ? 1:0);
+    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);
 #endif
-    esp_timer_start_periodic(updateTimerhandle, blynkUpdateInterval*1000);
+    blynkUpdateTimer.enableAll();
 }
 
-BLYNK_DISCONNECTED() {
-    esp_timer_stop(updateTimerhandle);
+BLYNK_DISCONNECTED()
+{
+#if DEBUG
+    Serial.println("Blynk disconnected");
+#endif
+    blynkUpdateTimer.disableAll();
 }
 
 void blynkReconnect()
@@ -113,8 +132,7 @@ void blynkReconnect()
     }
 }
 
-
-void blynkLoop(long now)
+void blynkLoop(unsigned long now)
 {
     if (!isValid())
     {
@@ -132,32 +150,33 @@ void blynkLoop(long now)
     } 
  
     Blynk.run();
+    blynkUpdateTimer.run();
 }
 
-BLYNK_READ(V0)
-{    
-    Blynk.virtualWrite(V0, gGridLegsPower[0]);
-}
-
-BLYNK_READ(V1)
+BLYNK_READ(BLYNK_VPIN_LEG_0)
 {
-    Blynk.virtualWrite(V1, gGridLegsPower[1]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegsPower[0]);
 }
 
-BLYNK_READ(V2)
+BLYNK_READ(BLYNK_VPIN_LEG_1)
 {
-    Blynk.virtualWrite(V2, gGridLegsPower[2]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegsPower[1]);
 }
 
-BLYNK_READ(V3)
+BLYNK_READ(BLYNK_VPIN_LEG_2)
 {
-    Blynk.virtualWrite(V3, gGridSumPower);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegsPower[2]);
+}
+
+BLYNK_READ(BLYNK_VPIN_ALL_LEGS)
+{
+    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumPower);
 }
 
 #if DEBUG
-BLYNK_WRITE(V50) 
+BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 {
-    Serial.print("V50 changed: ");
+    Serial.print("BLYNK_VPIN_MQTT_ENABLE changed: ");
     Serial.println(param.asInt());
     if (param.asInt() == 1) 
     {
@@ -168,7 +187,7 @@ BLYNK_WRITE(V50)
     }
 }
 
-BLYNK_WRITE(V3)
+BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
 {
     gGridSumPower = param.asInt();
 }

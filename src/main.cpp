@@ -4,25 +4,66 @@
 #include "blynkmanagement.h"
 #include "mqttmanagement.h"
 #include "invertermanagement.h"
+#include "chargeControllerManagement.h"
+
+void setup0();
+void loop0();
+
+void threadFunc(void*) {
+  setup0();
+  while (true)
+  {
+    loop0();
+  }
+}
+
+// Create a task that is running on the other CPU core
+// Than the calling thread.
+void threadSetup()
+{
+  TaskHandle_t taskId;
+  BaseType_t coreId = (xPortGetCoreID() + 1) % 2;
+  xTaskCreatePinnedToCore(threadFunc, "loop0", 2048, 0, 0, &taskId, coreId);
+}
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println();
-  Serial.println("Starting up...");
+  Serial.print("Starting up at core");
+  Serial.println(xPortGetCoreID());
 
   inverterPreInit();
   wifiSetup();
-  inverterSetup();
-  mqttSetup();
+  threadSetup();
   blynkSetup();
+  chargeControllerSetup();
 }
 
+// This one is executed on CPU 1
 void loop() {
-  long now = millis();
+  unsigned long now = millis();
   wifiLoop(now);
-  mqttLoop(now);
-  inverterLoop(now);
+  chargeControllerLoop(now);
   blynkLoop(now);
-  // put your main code here, to run repeatedly:
 }
+
+// Executed once before loop0
+// starts
+void setup0()
+{
+  // initialize your stuff here
+  mqttSetup();
+  inverterSetup();
+}
+
+// This one is executed on 
+// CPU 0
+void loop0() {
+    unsigned long now = millis();
+    
+    mqttLoop(now);
+    inverterLoop(now);
+}
+
+

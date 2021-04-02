@@ -39,9 +39,9 @@ void inverterSetup() {
     }
 }
 
-void inverterLoop(long now) {
+void inverterLoop(unsigned long now)
+{
 
-    
     // Make sure the inverter stops producing energy if
     // connection to grid power detector is lost.
     if (now - gInverterLastUpdateReceived > inverterTimeout)
@@ -69,7 +69,7 @@ void inverterLoop(long now) {
         lastModification = now;
         // If pin is low, the consumption on the grid is ecpected to rise
         // If it i high, if is high, expected to decrease, since the inverter produces more.
-        gGridSumPower = (pinValue == LOW) ? (gGridSumPower + 1.0) : (gGridSumPower - 1.0);
+        gGridSumPower = (pinValue == LOW) ? (gGridSumPower + 1.3) : (gGridSumPower - 1.3);
         
         if(now-gInverterLastUpdateReceived > 999) {
         Serial.print(inverterTarget);
@@ -82,4 +82,3 @@ void inverterLoop(long now) {
     }
 #endif
 }
-

@@ -116,7 +116,7 @@ void wifiSetup()
   Serial.println("Ready.");
 }
 
-void wifiLoop(long now)
+void wifiLoop(unsigned long now)
 {
   // -- doLoop should be called as frequently as possible.
   iotWebConf.doLoop();
@@ -160,45 +160,51 @@ void configSaved()
 {
   Serial.println("Configuration was updated.");
   needReset = true;
-}
+} 
 
 bool formValidator()
 {
   Serial.println("Validating form.");
-  bool valid = true;
+  
   int l = 0;
 
   l = server.arg(mqttServerParam.getId()).length();
   if (l> 0 && l < 3)
   {
     mqttServerParam.errorMessage = "MQTT server should have a minimum of 3 characters!";
-    valid = false;
-  }
+    return false;
+  } 
 
   l = server.arg(blynkServerParam.getId()).length();
   if (l>0 && l < 3)
   {
     mqttServerParam.errorMessage = "Blynk server should have a minimum of 3 characters!";
-    valid = false;
+    return false;
   }
 
   l = server.arg(blynkTokenParam.getId()).length();
   if(l>0 && l!= 32) {
     mqttServerParam.errorMessage = "Blynk token has to have length 32";
-    valid = false;
+    return false;
   }
 
   if (server.arg(inverterTargetValueParam.getId()).toInt() < 0)
   {
     mqttServerParam.errorMessage = "Inverter Target Value must be a positive number";
-    valid = false;
+    return false;
   }
 
   if (server.arg(inverterTimeoutParam.getId()).toInt() < 10000)
   {
     mqttServerParam.errorMessage = "Inverter Timeout Value must be >= 10000";
-    valid = false;
+    return false;
   }
-  
-  return valid;
+
+  if (server.arg(mqttEm3TopicParam.getId()).indexOf('+') < 0) {
+    mqttServerParam.errorMessage = "MQQT topic should cotain placeholder '+'";
+    return false;
+  }
+    
+
+  return true;
 }
