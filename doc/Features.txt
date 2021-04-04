@@ -3,17 +3,20 @@ Steuernung der Solaranlage
 Geplante Features
 
 1) Steuerung des Wechselrichters über dessen externe limiter Schnittstelle Siehe Beiliegendes Dokumen zum GTIL Controller.
-  Signal auf LOW: Mehr Power
-  Signal auf High: Weniger Power.
+  Signal auf HIGH: Mehr Power
+  Signal auf LOW: Weniger Power.
+  Erledigt.
 
 2) Verbindung zum SHELLY 3EM, um den Hausverbrauch zu berechnen
   MQTT dürfte das Einfachste sein.
+  Erledigt.
 
 3) Überwache das BMS, um den Nutzen aus der Anlage zu mximieren.
    Sobald die Batterien voll sind, erhöhe den Verbrauch über das Haussoll hinaus,
    bis Strom aus den Batterien abfließt. Das sollte genau der Punkt sein, der dem
    Solarertrag entspricht.
 4) Sobald die Batterie leer ist, schalte den Wechselrichter (Über shelly 1PM) aus.
+   Möglicherweise sollte hier ein SSR verwendet werden. 
 
 5) Webinterface zur Darstellung der Werte und evtl. zum De-/Aktivieren von Features.
    a) Eingabe der MQTT Daten
@@ -22,3 +25,5 @@ Geplante Features
    d) Zeige Status des Pins an
    e) Zeige Status von Shelly 1PM an
    f) Schalte Solaroptimierung ein/aus.
+
+   Änderung: Visualisierung findet über Blynk statt.
