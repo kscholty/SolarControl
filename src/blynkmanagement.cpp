@@ -19,7 +19,7 @@ char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
 char blynkPortValue[BLYNK_STRLEN] = "80";
 static long lastReconnectAttempt = 0;
-static long blynkUpdateInterval = 10000;
+static long blynkUpdateInterval = 20000;
 static SimpleTimer blynkUpdateTimer;
 
 
@@ -202,6 +202,7 @@ BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
 {
     gGridSumPower = param.asInt();
+    xTaskNotifyGive(gInverterTaskHandle);
 }
 
 #endif
