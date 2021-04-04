@@ -182,8 +182,7 @@ void chargeControllerThradFunc(void *)
                                 vTaskDelay(pdMS_TO_TICKS(100));
                                 updateController(i);
                         }
-                }
-                
+                }     
         }
 }
 

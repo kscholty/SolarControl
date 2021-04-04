@@ -138,7 +138,7 @@ void mqttHandleMessage(const char *topic, byte *payload, unsigned int length)
 
 }
 
-void mqttSetup() {
+void mqttSetupMqtt() {
     int port = String(mqttPortValue).toInt();
     if(port == 0) port = 1883;
     mqttEM3NameLength = strlen(mqttEM3Name);
@@ -154,36 +154,60 @@ void mqttSetup() {
     
 }
 
-void mqttLoop(unsigned long now)
+static void mqttLoop()
 {
-    if (!mqttClient.connected() )
+    TickType_t previousTime = xTaskGetTickCount();
+    while (true)
     {
-#if DEBUG          
-        if (_mqttEnabled)
-#endif        
-        {
-            if (now - lastReconnectAttempt > 5000)
+        if (!mqttClient.connected())
             {
-                lastReconnectAttempt = now;
-                // Attempt to reconnect
-                if (mqttReconnect())
+#if DEBUG
+            if (_mqttEnabled)
+#endif
+            {
+                unsigned long now = millis();
+                if (now - lastReconnectAttempt > 5000)
                 {
-                    lastReconnectAttempt = 0;
+                    lastReconnectAttempt = now;
+                    // Attempt to reconnect
+                    if (mqttReconnect())
+                    {
+                        lastReconnectAttempt = 0;
+                    }
                 }
             }
         }
-    }
-    else
-    {
-        do
-        {            
-            mqttClient.loop();
-        } while (wifiClient.available());
-
-        if (gInverterTaskHandle && abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
+        else
         {
-            lastGridSumPower = gGridSumPower;
-            xTaskNotifyGive(gInverterTaskHandle);
+            do
+            {
+                mqttClient.loop();
+            } while (wifiClient.available());
+
+            if (gInverterTaskHandle && abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
+            {
+                lastGridSumPower = gGridSumPower;
+                xTaskNotifyGive(gInverterTaskHandle);
+            }
         }
+        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(500));
+    }
+}
+
+static void mqttThradFunc(void *)
+{
+    mqttSetupMqtt();
+    mqttLoop();
+}
+
+void mqttSetup()
+{
+    TaskHandle_t handle;
+    BaseType_t result = xTaskCreate(mqttThradFunc, "mqtt", 2048, 0, 2, &handle);
+    if (result != pdPASS)
+    {
+        Serial.print(" MQTT taskCreation failed with error ");
+        Serial.println(result);
+        gInverterTaskHandle = 0;
     }
 }
