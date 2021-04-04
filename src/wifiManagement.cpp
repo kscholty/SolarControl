@@ -222,11 +222,14 @@ bool formValidator()
 
   String idString = server.arg(charger1Id.getId());
   idString.trim();
-  int chargerId = idString.toInt();
-  if (chargerId < 1 || chargerId > 255)
+  if (!idString.isEmpty())
   {
-    charger1Id.errorMessage = "Charger 1 Modbus ID must be between 1 and 255";
-    result = false;
+    int chargerId = idString.toInt();
+    if (chargerId < 1 || chargerId > 255)
+    {
+      charger1Id.errorMessage = "Charger 1 Modbus ID must be between 1 and 255";
+      result = false;
+    }
   }
 
   idString = server.arg(charger2Id.getId());
@@ -234,7 +237,7 @@ bool formValidator()
 
   if (!idString.isEmpty())
   {
-    chargerId = idString.toInt();
+    int chargerId = idString.toInt();
     if (chargerId < 1 || chargerId > 255)
     {
       charger2Id.errorMessage = "Charger 2 Modbus ID must be between 1 and 255";
@@ -242,5 +245,5 @@ bool formValidator()
     }
   }
 
-    return result;
-}
+  return result;
+  }
