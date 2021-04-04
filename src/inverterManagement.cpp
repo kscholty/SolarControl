@@ -14,9 +14,11 @@ char gInverterTargetValue[STRING_LEN]="30";
 char gInverterTimeoutValue[STRING_LEN] = "60000";
 long gInverterLastUpdateReceived = 0;
 bool gInverterShutdown = true;
+TaskHandle_t gInverterTaskHandle = 0;
 
 float gGridLegsPower[3] = {0.0, 0.0, 0.0};
-float gGridSumPower = 0;    
+float gGridSumPower = 0.0;
+
 
 static int inverterTarget = 30;
 static long inverterTimeout = 60000;
@@ -29,7 +31,7 @@ void inverterPreInit()
     inverterLock();
 }
 
-void inverterSetup() {
+void inverterSetupInverter() {
 
     inverterPreInit();
     inverterTarget = atoi(gInverterTargetValue);
@@ -39,46 +41,53 @@ void inverterSetup() {
     }
 }
 
-void inverterLoop(unsigned long now)
+static void inverterLoop()
 {
 
-    // Make sure the inverter stops producing energy if
-    // connection to grid power detector is lost.
-    if (now - gInverterLastUpdateReceived > inverterTimeout)
+    while (true)
     {
-        inverterLock();
-    }
-    else
-    {
-        inverterUnlock();
-    }
-
-    if (!inverterLocked())
-    {
-        // Here the whole magic happenes :-)
-        pinValue = (int)gGridSumPower > inverterTarget ? HIGH : LOW;
-    }
-    else
-    {
-        pinValue = LOW;
-    }
-    digitalWrite(INVERTERPIN, pinValue);
-
-#if DEBUG
-    if(!mqttEnabled() && (now-lastModification> 19)) {        
-        lastModification = now;
-        // If pin is low, the consumption on the grid is ecpected to rise
-        // If it i high, if is high, expected to decrease, since the inverter produces more.
-        gGridSumPower = (pinValue == LOW) ? (gGridSumPower + 1.3) : (gGridSumPower - 1.3);
-        
-        if(now-gInverterLastUpdateReceived > 999) {
-        Serial.print(inverterTarget);
-        Serial.print(" : ");
-        Serial.print(gGridSumPower);
-        Serial.print(" : ");
-        Serial.println((int)pinValue);
-        gInverterLastUpdateReceived = now;
+        // Wait until the data has been updated.
+        // Check for timeout to ensure that we don't crank the
+        // inverter up to maximum when we lose network connection
+        if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(inverterTimeout)))
+        {
+            // We had a timeout
+            inverterLock();
+            Serial.println("Inverter detected timeout. MQTT not running");
         }
+        else
+        {
+            // Seems to work fine...
+            Serial.println("Inverter got notified about new values");
+            inverterUnlock();
+        }
+
+        if (!inverterLocked())
+        {
+            // Here the whole magic happenes :-)
+            pinValue = (int)gGridSumPower > inverterTarget ? HIGH : LOW;
+        }
+        else
+        {
+            pinValue = LOW;
+        }
+        digitalWrite(INVERTERPIN, pinValue);
     }
-#endif
+}
+
+static void inverterThradFunc(void *)
+{
+    inverterSetupInverter();
+    inverterLoop();
+}
+
+void inverterSetup()
+{
+    BaseType_t result = xTaskCreate(inverterThradFunc, "inverter", 1024, 0, 2, &gInverterTaskHandle);
+    if (result != pdPASS)
+    {
+        Serial.print(" Charge Controller taskCreation failed with error ");
+        Serial.println(result);
+        gInverterTaskHandle = 0;
+    }
 }

@@ -15,6 +15,7 @@
 #include "blynkmanagement.h"
 #include "mqttmanagement.h"
 #include "inverterManagement.h"
+#include "chargeControllerManagement.h"
 
 
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
@@ -24,7 +25,7 @@ const char wifiInitialApPassword[] = "123456";
 #define NUMBER_LEN 32
 
 // -- Configuration specific key. The value should be modified if config structure was changed.
-#define CONFIG_VERSION "S1"
+#define CONFIG_VERSION "S0"
 
 // -- When CONFIG_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
@@ -67,15 +68,18 @@ IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter conf
 IotWebConfTextParameter inverterTargetValueParam = IotWebConfPasswordParameter("Inverter Target [W]", "invTarget", gInverterTargetValue, STRING_LEN, gInverterTargetValue);
 IotWebConfTextParameter inverterTimeoutParam = IotWebConfPasswordParameter("Inverter Timeout [ms]", "invTimeout", gInverterTimeoutValue, STRING_LEN, gInverterTimeoutValue);
 
+IotWebConfParameterGroup chargerGroup = IotWebConfParameterGroup("Charge controller configuration");
+IotWebConfNumberParameter charger1Id = IotWebConfNumberParameter("Charger 1 ModbusId","ch1modbus", gChargerModbusAdressesValue[0],4);
+IotWebConfNumberParameter charger2Id = IotWebConfNumberParameter("Charger 2 ModbusId", "ch2modbus", gChargerModbusAdressesValue[1], 4);
+IotWebConfNumberParameter chargerUdpateInterval = IotWebConfNumberParameter("Charger upd. interval [s]", "chupd", gChargerUpdateIntervalValue, sizeof(gChargerUpdateIntervalValue), gChargerUpdateIntervalValue);
+
 void wifiConnected()
 {
-  mqttReconnect();
-  blynkReconnect();
+
 }
 
 void wifiSetup()
 {
-
   blynkGroup.addItem(&blynkServerParam);
   blynkGroup.addItem(&blynkPortParam);
   blynkGroup.addItem(&blynkTokenParam);
@@ -90,12 +94,17 @@ void wifiSetup()
   inverterGroup.addItem(&inverterTargetValueParam);
   inverterGroup.addItem(&inverterTimeoutParam);
 
+  chargerGroup.addItem(&charger1Id);
+  chargerGroup.addItem(&charger2Id);
+  chargerGroup.addItem(&chargerUdpateInterval);
+
   iotWebConf.setStatusPin(STATUS_PIN);
   iotWebConf.setConfigPin(CONFIG_PIN);
 
   iotWebConf.addParameterGroup(&mqttGroup);
   iotWebConf.addParameterGroup(&blynkGroup);
   iotWebConf.addParameterGroup(&inverterGroup);
+  iotWebConf.addParameterGroup(&chargerGroup);
 
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
@@ -165,46 +174,73 @@ void configSaved()
 bool formValidator()
 {
   Serial.println("Validating form.");
-  
+  bool result = true;
+
   int l = 0;
 
   l = server.arg(mqttServerParam.getId()).length();
   if (l> 0 && l < 3)
   {
     mqttServerParam.errorMessage = "MQTT server should have a minimum of 3 characters!";
-    return false;
+    result = false;
   } 
 
   l = server.arg(blynkServerParam.getId()).length();
   if (l>0 && l < 3)
   {
-    mqttServerParam.errorMessage = "Blynk server should have a minimum of 3 characters!";
-    return false;
+    blynkServerParam.errorMessage = "Blynk server should have a minimum of 3 characters!";
+    result = false;
   }
 
   l = server.arg(blynkTokenParam.getId()).length();
   if(l>0 && l!= 32) {
-    mqttServerParam.errorMessage = "Blynk token has to have length 32";
-    return false;
+    blynkTokenParam.errorMessage = "Blynk token has to have length 32";
+    result = false;
   }
 
   if (server.arg(inverterTargetValueParam.getId()).toInt() < 0)
   {
-    mqttServerParam.errorMessage = "Inverter Target Value must be a positive number";
-    return false;
+    inverterTargetValueParam.errorMessage = "Inverter Target Value must be a positive number";
+    result = false;
   }
 
   if (server.arg(inverterTimeoutParam.getId()).toInt() < 10000)
   {
-    mqttServerParam.errorMessage = "Inverter Timeout Value must be >= 10000";
-    return false;
+    inverterTimeoutParam.errorMessage = "Inverter Timeout Value must be >= 10000";
+    result = false;
   }
 
   if (server.arg(mqttEm3TopicParam.getId()).indexOf('+') < 0) {
-    mqttServerParam.errorMessage = "MQQT topic should cotain placeholder '+'";
-    return false;
+    mqttEm3TopicParam.errorMessage = "MQQT topic should cotain placeholder '+'";
+    result = false;
   }
-    
 
-  return true;
+  if (server.arg(chargerUdpateInterval.getId()).toInt() < 10) {
+    chargerUdpateInterval.errorMessage = "Charger update interval must be > 10s";
+    result = false;
+  }
+
+  String idString = server.arg(charger1Id.getId());
+  idString.trim();
+  int chargerId = idString.toInt();
+  if (chargerId < 1 || chargerId > 255)
+  {
+    charger1Id.errorMessage = "Charger 1 Modbus ID must be between 1 and 255";
+    result = false;
+  }
+
+  idString = server.arg(charger2Id.getId());
+  idString.trim();
+
+  if (!idString.isEmpty())
+  {
+    chargerId = idString.toInt();
+    if (chargerId < 1 || chargerId > 255)
+    {
+      charger2Id.errorMessage = "Charger 2 Modbus ID must be between 1 and 255";
+      result = false;
+    }
+  }
+
+    return result;
 }

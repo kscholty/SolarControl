@@ -19,8 +19,11 @@ int mqttEM3NameLength = 0;
 char mqttEM3Topic[STRING_LEN] = "/emeter/+/power";
 static int legPosInMessage = -1;
 
-WiFiClient ethClient;
-PubSubClient mqttClient(ethClient);
+static float lastGridSumPower = 0.0;
+#define NOTIFY_DELTA (float)5.0
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
 
 static long lastReconnectAttempt = 0;
 
@@ -88,19 +91,22 @@ static void parseEm3Result(const char *txt, const char *payload)
             Serial.print(" : ");
             Serial.println(aValue);
 #endif
-        } else {
-        gGridLegsPower[aLeg] = aValue;
-        gGridSumPower = gGridLegsPower[0] + gGridLegsPower[1] + gGridLegsPower[2];
-        gInverterLastUpdateReceived = millis();
-#if DEBUG
-        Serial.print("Leg ");
-        Serial.print(aLeg);
-        Serial.print(": ");
-        Serial.print(aValue);
-        Serial.print(" Sum: ");
-        Serial.println(gGridSumPower);
         }
+        else
+        {
+            gGridLegsPower[aLeg] = aValue;
+            gGridSumPower = gGridLegsPower[0] + gGridLegsPower[1] + gGridLegsPower[2];
+            gInverterLastUpdateReceived = millis();
+
+#if DEBUG
+            Serial.print("Leg ");
+            Serial.print(aLeg);
+            Serial.print(": ");
+            Serial.print(aValue);
+            Serial.print(" Sum: ");
+            Serial.println(gGridSumPower);
 #endif
+        }
 }
 
 void mqttHandleMessage(const char *topic, byte *payload, unsigned int length)
@@ -152,7 +158,7 @@ void mqttLoop(unsigned long now)
 {
     if (!mqttClient.connected() )
     {
-#if DEBUG        
+#if DEBUG          
         if (_mqttEnabled)
 #endif        
         {
@@ -169,7 +175,15 @@ void mqttLoop(unsigned long now)
     }
     else
     {
-        // Client connected
-        mqttClient.loop();        
+        do
+        {            
+            mqttClient.loop();
+        } while (wifiClient.available());
+
+        if (gInverterTaskHandle && abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
+        {
+            lastGridSumPower = gGridSumPower;
+            xTaskNotifyGive(gInverterTaskHandle);
+        }
     }
 }

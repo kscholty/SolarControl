@@ -1,7 +1,3 @@
-#include "blynkmanagement.h"
-#include "inverterManagement.h"
-#include "mqttmanagement.h"
-#include "chargeControllerManagement.h"
 
 #define BLYNK_SEND_ATOMIC
 
@@ -14,12 +10,16 @@
 #include <Adapters/BlynkArduinoClient.h>
 #include <WiFi.h>
 
+#include "blynkmanagement.h"
+#include "inverterManagement.h"
+#include "mqttmanagement.h"
+#include "chargeControllerManagement.h"
 
 char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
 char blynkPortValue[BLYNK_STRLEN] = "80";
 static long lastReconnectAttempt = 0;
-static long blynkUpdateInterval = 5000;
+static long blynkUpdateInterval = 10000;
 static SimpleTimer blynkUpdateTimer;
 
 
@@ -72,13 +72,24 @@ void blynkUpdateGrid()
 
 void blynkUpdateChargeController() {
     static int index = 0;
+
+    if (gChargerValuesChanged[index])
+    {
 #if DEBUG
-    Serial.print("Updating charge controller "); Serial.print(index+1); Serial.println(" data on Blynk");
-#endif    
-    for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i) {
-        Blynk.virtualWrite(BLYNK_CHARGER_PIN(index,i),chargerValues[index][i]);
+        Serial.print("Updating charge controller ");
+        Serial.print(index + 1);
+        Serial.println(" data on Blynk");
+#endif
+        gChargerValuesChanged[index] = false;
+        for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
+        {
+            Blynk.virtualWrite(BLYNK_CHARGER_PIN(index, i), chargerValues[index][i] / 100.0f);
+        }
+        do
+        {
+            index = (index + 1) % NUM_CHARGERS;
+        } while (!chargerIsValid(index));
     }
-    index = (index+1) % NUM_CHARGERS;
 }
 
 void blynkSetup()
@@ -90,13 +101,14 @@ void blynkSetup()
     }
 
     if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateGrid) <0 ) {
-        Serial.println("Cannot create blynk grit update timer");
+        Serial.println("Cannot create blynk grid update timer");
     }
 
-    if (blynkUpdateTimer.setInterval(blynkUpdateInterval / NUM_CHARGERS, blynkUpdateChargeController) < 0)
-    {
-        Serial.println("Cannot create blynk charge controller 1 timer");
-    }
+    if (gChargerNumValidChargers > 0)
+        if (blynkUpdateTimer.setInterval(2500, blynkUpdateChargeController) < 0)
+        {
+            Serial.println("Cannot create blynk charge controller 1 timer");
+        }
     
     blynkUpdateTimer.disableAll();
 }

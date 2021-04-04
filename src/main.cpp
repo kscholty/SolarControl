@@ -23,7 +23,7 @@ void threadSetup()
 {
   TaskHandle_t taskId;
   BaseType_t coreId = (xPortGetCoreID() + 1) % 2;
-  xTaskCreatePinnedToCore(threadFunc, "loop0", 2048, 0, 0, &taskId, coreId);
+  xTaskCreatePinnedToCore(threadFunc, "loop0", 2048, 0, 1, &taskId, coreId);
 }
 
 void setup() {
@@ -35,9 +35,10 @@ void setup() {
 
   inverterPreInit();
   wifiSetup();
+  inverterSetup();
   threadSetup();
-  blynkSetup();
   chargeControllerSetup();
+  blynkSetup(); // This should be last, in order to have all data available
 }
 
 // This one is executed on CPU 1
@@ -53,16 +54,15 @@ void setup0()
 {
   // initialize your stuff here
   mqttSetup();
-  inverterSetup();
+ 
 }
 
 // This one is executed on 
 // CPU 0
 void loop0() {
-    unsigned long now = millis();
-    
+    unsigned long now = millis();    
     mqttLoop(now);
-    inverterLoop(now);
+    delay(100);
 }
 
 
