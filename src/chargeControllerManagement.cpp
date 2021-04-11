@@ -30,8 +30,7 @@ static unsigned int calculateChargerIds() {
                 chargerModbusAdresses[i] = atoi(gChargerModbusAdressesValue[i]);
                 gChargerValuesChanged[i] = false;
                 if (chargerValid(i))
-                {
-                        charger[i].begin(chargerModbusAdresses[i], Serial2);
+                {                       
                         ++count;
                 }
         }
@@ -39,8 +38,7 @@ static unsigned int calculateChargerIds() {
 }
 
 static void chargeControllerSetupController()
-{
-        Serial2.begin(BAUDRATE);
+{        
         for (int i = 0; i < NUM_CHARGERS; ++i)
         {
                 if (chargerValid(i))
@@ -159,9 +157,10 @@ void updateController(uint index)
         Serial.print("Updating controller ");
         Serial.println(index + 1);
 #endif
+        
         result = readPvAndBattery(index) || result;
         result = readTemps(index) || result;
-        result = readStates(index) || result;
+        result = readStates(index) || result;        
         gChargerValuesChanged[index] = result;
 }
 
@@ -169,6 +168,10 @@ void chargeControllerThradFunc(void *)
 {
         if (gChargerNumValidChargers == 0)
         {
+#if DEBUG
+                Serial.println("Charge controller: No valid controllers");
+
+#endif
                 // That is an error and shouldn't happen!
                 vTaskDelete(xTaskGetCurrentTaskHandle());
         }        
@@ -176,13 +179,27 @@ void chargeControllerThradFunc(void *)
         TickType_t previousTime = xTaskGetTickCount();
         while (true)
         {
-                vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(gChargerUpdateIntervalMilis-100));
-                for(int i = 0; i<NUM_CHARGERS;++i) {
-                        if(chargerValid(i)) {
-                                vTaskDelay(pdMS_TO_TICKS(100));
-                                updateController(i);
+                vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(gChargerUpdateIntervalMilis - 100));
+                if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(3000)) == pdTRUE)
+                {
+                        Serial2.updateBaudRate(BAUDRATE);
+                        for (int i = 0; i < NUM_CHARGERS; ++i)
+                        {
+                                if (chargerValid(i))
+                                {
+                                        vTaskDelay(pdMS_TO_TICKS(100));
+                                        updateController(i);
+                                }
                         }
-                }     
+                        Serial2.updateBaudRate(9600);
+                        xSemaphoreGive(gSerial2Mutex);
+                }
+#if DEBUG
+                else
+                {
+                        Serial.println("Could not acquire Serial 2 mutex for charger update");
+                }
+#endif
         }
 }
 
@@ -195,6 +212,10 @@ void chargeControllerSetup()
         {
                 gChargerUpdateIntervalMilis = 10000;
         }
+        #if DEBUG
+        Serial.print("Num controllers : ");
+        Serial.println(gChargerNumValidChargers);
+#endif
         if (gChargerNumValidChargers > 0)
         {
                 BaseType_t result = xTaskCreate(chargeControllerThradFunc, "chrgCntrl", 2048, 0, 1, &taskId);

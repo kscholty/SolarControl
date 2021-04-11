@@ -21,15 +21,12 @@
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
 const char wifiInitialApPassword[] = "123456";
 
-#define STRING_LEN 128
-#define NUMBER_LEN 32
-
 // -- Configuration specific key. The value should be modified if config structure was changed.
-#define CONFIG_VERSION "S0"
+#define CONFIG_VERSION "S1"
 
 // -- When CONFIG_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
-#define CONFIG_PIN  13
+#define CONFIG_PIN  -1
 
 // -- Status indicator pin.
 //      First it will light up (kept LOW), on Wifi connection it will blink,
@@ -40,7 +37,7 @@ const char wifiInitialApPassword[] = "123456";
 void handleRoot();
 // -- Callback methods.
 void configSaved();
-bool formValidator();
+bool formValidator(iotwebconf::WebRequestWrapper*);
 
 DNSServer dnsServer;
 WebServer server(80);
@@ -54,19 +51,23 @@ IotWebConf iotWebConf(thingName, &dnsServer, &server, wifiInitialApPassword, CON
 IotWebConfParameterGroup blynkGroup = IotWebConfParameterGroup("Blynk configuration");
 IotWebConfTextParameter blynkTokenParam = IotWebConfTextParameter("Blynk Token", "blynkToken", blynkTokenValue, BLYNK_STRLEN);
 IotWebConfTextParameter blynkServerParam = IotWebConfTextParameter("Blynk server", "blynkServer", blynkServerValue, STRING_LEN, blynkServerValue);
-IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, STRING_LEN, blynkPortValue);
+IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, NUMBER_LEN, blynkPortValue);
 
 IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("MQTT configuration");
 IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server", "mqttServer", mqttServerValue, STRING_LEN, mqttServerValue);
-IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, STRING_LEN, mqttPortValue);
+IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, NUMBER_LEN, mqttPortValue);
 IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("MQTT user", "mqttUser", mqttUserNameValue, STRING_LEN);
 IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("MQTT password", "mqttPass", mqttUserPasswordValue, STRING_LEN);
 IotWebConfTextParameter mqttEm3NameParam = IotWebConfPasswordParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
 IotWebConfTextParameter mqttEm3TopicParam = IotWebConfPasswordParameter("EM3 Topic", "em3topic", mqttEM3Topic, STRING_LEN, mqttEM3Topic);
 
 IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
-IotWebConfTextParameter inverterTargetValueParam = IotWebConfPasswordParameter("Inverter Target [W]", "invTarget", gInverterTargetValue, STRING_LEN, gInverterTargetValue);
-IotWebConfTextParameter inverterTimeoutParam = IotWebConfPasswordParameter("Inverter Timeout [ms]", "invTimeout", gInverterTimeoutValue, STRING_LEN, gInverterTimeoutValue);
+
+IotWebConfNumberParameter inverterUpdateIntervalParam = IotWebConfNumberParameter("Inverter update interval [ms]", "invUp", gInverterUpdateIntervalValue, NUMBER_LEN, gInverterUpdateIntervalValue);
+IotWebConfNumberParameter inverterTargetValueParam = IotWebConfNumberParameter("Inverter Offset [W]", "invOff", gInverterOffsetValue, NUMBER_LEN, gInverterOffsetValue);
+IotWebConfNumberParameter inverterTimeoutParam = IotWebConfNumberParameter("Inverter Timeout [ms]", "invTimeout", gInverterTimeoutValue, NUMBER_LEN, gInverterTimeoutValue);
+IotWebConfNumberParameter inverterEmergencyTargetValueParam = IotWebConfNumberParameter("Default output [W]", "EmOut", gInverterEmergencyTargetValue, NUMBER_LEN, gInverterEmergencyTargetValue);
+IotWebConfCheckboxParameter inverterEcessValueParam = IotWebConfCheckboxParameter("Send excess power to grid","excess",gSendExcessToGrid,NUMBER_LEN,true);
 
 IotWebConfParameterGroup chargerGroup = IotWebConfParameterGroup("Charge controller configuration");
 IotWebConfNumberParameter charger1Id = IotWebConfNumberParameter("Charger 1 ModbusId","ch1modbus", gChargerModbusAdressesValue[0],4);
@@ -91,8 +92,12 @@ void wifiSetup()
   mqttGroup.addItem(&mqttEm3NameParam);
   mqttGroup.addItem(&mqttEm3TopicParam);
 
+  inverterGroup.addItem(&inverterUpdateIntervalParam);
   inverterGroup.addItem(&inverterTargetValueParam);
   inverterGroup.addItem(&inverterTimeoutParam);
+  inverterGroup.addItem(&inverterEmergencyTargetValueParam);
+  inverterGroup.addItem(&inverterEcessValueParam);
+
 
   chargerGroup.addItem(&charger1Id);
   chargerGroup.addItem(&charger2Id);
@@ -110,7 +115,7 @@ void wifiSetup()
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
 
 
-  iotWebConf.setFormValidator(&formValidator);
+  iotWebConf.setFormValidator(formValidator);
   iotWebConf.getApTimeoutParameter()->visible = true;
 
   // -- Initializing the configuration.
@@ -131,12 +136,9 @@ void wifiLoop(unsigned long now)
   iotWebConf.doLoop();
 
   if(needReset) {
-    if (needReset)
-    {
       Serial.println("Rebooting after 1 second.");
       iotWebConf.delay(1000);
       ESP.restart();
-    }
   }
 }
 
@@ -171,7 +173,7 @@ void configSaved()
   needReset = true;
 } 
 
-bool formValidator()
+bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 {
   Serial.println("Validating form.");
   bool result = true;
@@ -198,9 +200,18 @@ bool formValidator()
     result = false;
   }
 
-  if (server.arg(inverterTargetValueParam.getId()).toInt() < 0)
+  
+  
+  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 1000)
   {
-    inverterTargetValueParam.errorMessage = "Inverter Target Value must be a positive number";
+    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 1000";
+    result = false;
+  }
+
+  l = server.arg(inverterEmergencyTargetValueParam.getId()).toInt();
+  if ( l < 0 || l > 1000)
+  {
+    inverterEmergencyTargetValueParam.errorMessage = "Inverter default Target Value must be between 0 and 1000";
     result = false;
   }
 

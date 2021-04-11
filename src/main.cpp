@@ -15,10 +15,14 @@ void setup() {
   Serial.println(xPortGetCoreID());
 
   inverterPreInit();
+  gSerial2Mutex = xSemaphoreCreateMutex();
+  if(gSerial2Mutex == NULL) {
+    Serial.println("Could not allocate mutex");
+  }
   wifiSetup();
   mqttSetup();
-  inverterSetup();  
   chargeControllerSetup();
+  inverterSetup();  
   blynkSetup(); // This should be last, in order to have all data available
 }
 

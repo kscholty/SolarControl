@@ -9,7 +9,7 @@
 
 
 char mqttServerValue[STRING_LEN] = "fhem.home.lan";
-char mqttPortValue[STRING_LEN] = "1883";
+char mqttPortValue[NUMBER_LEN] = "1883";
 char mqttUserNameValue[STRING_LEN];
 char mqttUserPasswordValue[STRING_LEN];
 
@@ -20,7 +20,7 @@ char mqttEM3Topic[STRING_LEN] = "/emeter/+/power";
 static int legPosInMessage = -1;
 
 static float lastGridSumPower = 0.0;
-#define NOTIFY_DELTA (float)5.0
+#define NOTIFY_DELTA (float)1.0
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -95,9 +95,7 @@ static void parseEm3Result(const char *txt, const char *payload)
         else
         {
             gGridLegsPower[aLeg] = aValue;
-            gGridSumPower = gGridLegsPower[0] + gGridLegsPower[1] + gGridLegsPower[2];
-            gInverterLastUpdateReceived = millis();
-
+            gGridSumPower = gGridLegsPower[0] + gGridLegsPower[1] + gGridLegsPower[2];            
 #if DEBUG
             Serial.print("Leg ");
             Serial.print(aLeg);
@@ -184,10 +182,10 @@ static void mqttLoop()
                 mqttClient.loop();
             } while (wifiClient.available());
 
-            if (gInverterTaskHandle && abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
+            if (abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
             {
                 lastGridSumPower = gGridSumPower;
-                xTaskNotifyGive(gInverterTaskHandle);
+                gInverterGridPowerUpdated();                
             }
         }
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(500));

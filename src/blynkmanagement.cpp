@@ -17,7 +17,7 @@
 
 char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
-char blynkPortValue[BLYNK_STRLEN] = "80";
+char blynkPortValue[NUMBER_LEN] = "80";
 static long lastReconnectAttempt = 0;
 static long blynkUpdateInterval = 20000;
 static SimpleTimer blynkUpdateTimer;
@@ -70,6 +70,40 @@ void blynkUpdateGrid()
     Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumPower);
 }
 
+void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
+{
+    char *text = "Unknown";
+    switch (type)
+    {
+    case BATTERY_STATUS:
+        
+        switch(value & 0x0F) {
+            case 00: text = "Normal"; break;
+            case 01: text = "Overvolt"; break;
+            case 02: text = "Undervolt"; break;
+            case 03: text = "Low Volt Disconnect"; break;
+            case 04: text = "Fault"; break;
+        }
+        Blynk.virtualWrite(pin, text);        
+        break;
+
+    case CONTROLLER_STATUS:
+        switch( (value&0x0C)>>2)
+        {
+            case 0: text = "No charging"; break;
+            case 1: text = "Float charge"; break;
+            case 2: text = "Boost charge"; break;
+            case 3: text = "Equal. charge"; break;
+        }
+        Blynk.virtualWrite(pin, text); 
+        break;
+        
+    default:
+        Blynk.virtualWrite(pin, (float)value / 100.0f);
+        break;
+    }
+}
+
 void blynkUpdateChargeController() {
     static int index = 0;
 
@@ -82,8 +116,8 @@ void blynkUpdateChargeController() {
 #endif
         gChargerValuesChanged[index] = false;
         for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
-        {
-            Blynk.virtualWrite(BLYNK_CHARGER_PIN(index, i), chargerValues[index][i] / 100.0f);
+        {            
+            sendStatus(BLYNK_CHARGER_PIN(index, i), (ChargerValues_t)i, chargerValues[index][i]);
         }
         do
         {
@@ -202,7 +236,7 @@ BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
 {
     gGridSumPower = param.asInt();
-    xTaskNotifyGive(gInverterTaskHandle);
+    gInverterGridPowerUpdated();    
 }
 
 #endif

@@ -21,7 +21,7 @@
 
 extern char blynkTokenValue[BLYNK_STRLEN];
 extern char blynkServerValue[BLYNK_STRLEN];
-extern char blynkPortValue[BLYNK_STRLEN];
+extern char blynkPortValue[NUMBER_LEN];
 
 extern void blynkSetup();
 extern void blynkReconnect();
