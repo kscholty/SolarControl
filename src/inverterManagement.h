@@ -10,8 +10,17 @@ extern float gGridLegsPower[3];
 // The sum of used power
 extern float gGridSumPower;
 
-// The current outut of the inverter
-extern float gInverterPower;
+// The current power output of the inverter
+extern double gInverterPower;
+
+//The current curent output of the inverter
+extern float gInverterCurrent;
+
+// The current voltage at the inverter output
+extern float gInverterVoltage;
+
+// The current power factor at the inverter output
+extern float gInverterPowerFactor;
 
 // The maximum time of ms that er allowe to pass between two power readings
 // before the inverter's is set to 0;
@@ -48,3 +57,9 @@ extern void gInverterGridPowerUpdated();
 
 // Check in Inverer is forced to 0
 #define inverterLocked() (gInverterShutdown == true)
+
+#if DEBUG
+extern void stopPID();
+extern void startPID();
+extern bool PIDEnabled();
+#endif

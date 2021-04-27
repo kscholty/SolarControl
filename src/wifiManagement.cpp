@@ -202,9 +202,9 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 
   
   
-  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 1000)
+  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 10)
   {
-    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 1000";
+    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 10";
     result = false;
   }
 

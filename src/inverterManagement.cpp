@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ModbusMaster.h>
 #include "inverterManagement.h"
+#include "adc.h"
 
 #if DEBUG
 #include "mqttmanagement.h"
@@ -10,8 +11,8 @@
 int lastModification = 0;
 #endif
 
-#define SERIAL1_TX 23
-#define SERIAL1_RX 22
+#define SERIAL_TX 23
+#define SERIAL_RX 22
 //#define BATTERY_FULL
 
 // This is the distance we want to stay away from 0 grid consumption
@@ -22,7 +23,7 @@ char gInverterTimeoutValue[NUMBER_LEN] = "60000";
 char gInverterEmergencyTargetValue[NUMBER_LEN] = "100";
 char gSendExcessToGrid[NUMBER_LEN] = "selected";
 char gInverterUpdateIntervalValue[NUMBER_LEN] = "2000";
-char gInverterModbusId[NUMBER_LEN] = "0";
+char gInverterModbusId[NUMBER_LEN] = "1";
 
 bool gInverterShutdown = true;
 
@@ -31,28 +32,41 @@ TaskHandle_t gInverterTaskHandle = 0;
 
 float gGridLegsPower[3] = {0.0, 0.0, 0.0};
 float gGridSumPower = 0.0;
-float gInverterPower = 0.0;
+double gInverterPower = 0.0;
+float gInverterCurrent = 0.0;
+float gInverterVoltage = 0.0;
+float gInverterPowerFactor = 0.0;
 SemaphoreHandle_t gSerial2Mutex = NULL;;
 
 static int inverterOffset = 0;
-static float inverterTarget = 0.0f;
+static double inverterTarget = 0.0f;
 static long lastGridUpdateReceived = 0;
 
 static long inverterTimeout = 60000;
 static unsigned int inverterEmergencyTarget=100;
-static unsigned int inverterUpdateInterval = 2000;
-static unsigned int inverterModbusId = 3;
+static unsigned int inverterUpdateInterval = 200;
 
 static uint8_t pinValue;
 static ModbusMaster inverterMaster;
 static bool excessToGrid = false;
 static bool useInverterOutput = true;
 
-static void inverterModbusThreadFunc(void *);
 
 
 void inverterIdle() {
     vTaskDelay(10);
+}
+
+void stopPID() {
+
+}
+
+void startPID() {
+
+}
+
+bool PIDEnabled() {
+    return true;
 }
 
 void inverterPreInit() 
@@ -60,6 +74,7 @@ void inverterPreInit()
     pinMode(INVERTERPIN, OUTPUT);
     digitalWrite(INVERTERPIN, LOW);    
     Serial2.begin(9600);
+    //inverterSerial.begin(9600, SWSERIAL_8N1, SERIAL_RX, SERIAL_TX, false, 95, 11);
     inverterLock();
 }
 
@@ -72,13 +87,12 @@ static void inverterSetupInverter()
 
     inverterEmergencyTarget = atoi(gInverterEmergencyTargetValue);    
     inverterUpdateInterval = atoi(gInverterUpdateIntervalValue);
-    inverterModbusId = atoi(gInverterModbusId);
+    
+    useInverterOutput = true;
 
-    useInverterOutput = (inverterModbusId > 0);
-
-    if (inverterUpdateInterval < 1000)
+    if (inverterUpdateInterval < 10)
     {
-        inverterUpdateInterval = 1200;
+        inverterUpdateInterval = 10;
     }
 
     inverterTarget = inverterEmergencyTarget;
@@ -90,17 +104,9 @@ static void inverterSetupInverter()
 
     if (useInverterOutput)
     {
-        inverterMaster.idle(inverterIdle);
-        inverterMaster.begin(inverterModbusId, Serial2);
-        
-        TaskHandle_t modbusThread;
-        BaseType_t result = xTaskCreate(inverterModbusThreadFunc, "invModbus", 1024, 0, 2, &modbusThread);
-        if (result != pdPASS)
-        {
-            useInverterOutput = false;
-            Serial.print("Inverter task Creation failed with error ");
-            Serial.println(result);
-        }
+        //inverterMaster.idle(inverterIdle);
+        //inverterMaster.begin(inverterModbusId, Serial2);
+        adcInit();        
     }
     else
     {
@@ -114,7 +120,7 @@ void gInverterGridPowerUpdated() {
     // New grid power use detected.
     // Now our target is this value plus the current inverter production.
     // Minus an offest to avoid overproduction.
-    inverterTarget = gGridSumPower+gInverterPower-inverterOffset;
+    inverterTarget = gGridSumPower+gInverterCurrent-inverterOffset;
     #if DEBUG
     Serial.print("Inverter Target: ");
     Serial.println(inverterTarget);
@@ -123,34 +129,33 @@ void gInverterGridPowerUpdated() {
     xTaskNotifyGive(gInverterTaskHandle);
 }
 
+
+bool ReadInverter() {
+    gInverterCurrent =  adcGetCurrent();
+    gInverterVoltage = 230;
+    gInverterPowerFactor = 1;
+    gInverterPower = gInverterCurrent*gInverterVoltage / gInverterPowerFactor;  // Use grid values later on
+
+    return true;   
+}
+
 static void inverterLoop()
 {
-    
+    TickType_t previousTime = xTaskGetTickCount();
     while (true)
     {
-        // Wait until the data has been updated.
-        // Check for timeout to ensure that we don't crank the
-        // inverter up to maximum when we lose network connection
-        if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(inverterTimeout)))
+
+        if (millis() - lastGridUpdateReceived > inverterTimeout)
         {
-            // We had a timeout. Nobody is talking anymore
-            // So we are careful and bring the
-            // output to 0.
-            inverterLock();
+            // MQTT has a problem it seems...
+            // So let's go to our  default output
+            inverterTarget = inverterEmergencyTarget;
 #if DEBUG
-            Serial.println("Inverter detected timeout. MQTT and Inverter not running");
-#endif            
+            Serial.println("Inverter detected timeout. MQTT not running");
+#endif
         }
-        else
-        {
-            if(millis() - lastGridUpdateReceived > inverterTimeout) {
-                // MQTT has a problem it seems...
-                // So let's go to our  default output
-                inverterTarget = inverterEmergencyTarget;
-            } 
-            // Seems to work fine...
-            inverterUnlock();            
-        }
+        // Seems to work fine...
+        inverterUnlock();
 
         if (!inverterLocked())
         {
@@ -158,7 +163,15 @@ static void inverterLoop()
             {
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
-                pinValue = gInverterPower < inverterTarget ? HIGH : LOW;
+                ReadInverter();
+                if (gInverterPower < inverterTarget)
+                {
+                    pinValue = HIGH;
+                }
+                else
+                {
+                    pinValue = LOW;
+                }
             }
             else
             {
@@ -171,7 +184,22 @@ static void inverterLoop()
         {
             pinValue = LOW;
         }
-        digitalWrite(INVERTERPIN, pinValue);          
+        digitalWrite(INVERTERPIN, pinValue);
+
+#if DEBUG
+        static int count = 0;
+        if(count == 0) {
+        Serial.print(" Z: ");
+        Serial.print(inverterTarget);
+        Serial.print(" I: ");
+        Serial.print(gInverterPower);
+        Serial.print(" C ");
+        Serial.println(gInverterCurrent);
+        } else { 
+            count = (count+1) % 100;
+        }
+#endif
+        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
     }
 }
 
@@ -181,67 +209,51 @@ static void inverterThradFunc(void *)
     inverterLoop();
 }
 
+#if 0
 #define MK_32(LOW,HIGH) (( ((int32_t)(HIGH)) <<16)|(LOW))
 
 bool ReadInverter()
 {
-    // Critical section here access to Serial2    
-#if DEBUG
-    Serial.println("Querying Inverter");
-#endif
+    // Critical section here access to Serial2
     uint8_t result = 255;
-    inverterMaster.clearTransmitBuffer();
-    inverterMaster.clearResponseBuffer();
-// Start critical section here
-    if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(inverterUpdateInterval)))
+    // Start critical section here
+    //  if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(inverterUpdateInterval)))
     {
-        #define NUMVALUES(LOW,HIGH) (HIGH-LOW+1)
-        result = inverterMaster.readHoldingRegisters(86, NUMVALUES(86,87));
-        xSemaphoreGive(gSerial2Mutex);
+        result = inverterMaster.readInputRegisters(0, 10);
+        //    xSemaphoreGive(gSerial2Mutex);
     }
-// End critical section here
+    // End critical section here
     if (result == inverterMaster.ku8MBSuccess)
     {
-        // Do update here....
-        // End critical section here
-        int32_t currentPower = MK_32(inverterMaster.getResponseBuffer(0),inverterMaster.getResponseBuffer(1));
-        gInverterPower = currentPower / 10.0f;
-        xTaskNotifyGive(gInverterTaskHandle);   
-        #if DEBUG
-        for(int i= 0;i<NUMVALUES(86,87);++i) {
-        Serial.print(i+86);
-        Serial.print(" : ");
-        uint16_t res = inverterMaster.getResponseBuffer(i);
-        Serial.print(res); Serial.print(" "); Serial.println(makeWord(res & 0xFF,res>>8));
+        gInverterPower = MK_32(inverterMaster.getResponseBuffer(3), inverterMaster.getResponseBuffer(4)) / 10.0f;
+
+        gInverterCurrent = MK_32(inverterMaster.getResponseBuffer(1), inverterMaster.getResponseBuffer(2)) / 1000.0f;
+        gInverterVoltage = inverterMaster.getResponseBuffer(0) / 10.0f;
+        gInverterPowerFactor = inverterMaster.getResponseBuffer(8) / 100.0f;
+
+        static float lastPower = 0;
         
+        if (lastPower != gInverterPower)
+        {
+            xTaskNotifyGive(gInverterTaskHandle);
+            lastPower = gInverterPower;
+#if DEBUG
+            // Serial.print("New power from inverter: ");
+            // Serial.println(gInverterPower);
+#endif
         }
-        Serial.print("New power from inverter: ");
-        Serial.println(currentPower);
-        #endif
     }
 #if DEBUG
     else
     {
-        Serial.print("Failed with error: ");
-        Serial.println(result);        
+        Serial.print("Inverter query Failed with error: ");
+        Serial.println(result);
     }
-#endif    
+#endif
     return (result == inverterMaster.ku8MBSuccess);
 }
+#endif
 
-
-static void inverterModbusThreadFunc(void *) {
-
-    TickType_t previousTime = xTaskGetTickCount();
-    while (true)
-    {
-        if(!ReadInverter()) {
-            // On failure we wait some more time...
-            previousTime = xTaskGetTickCount();
-        }
-        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
-    }
-}
 
 void inverterSetup()
 {    

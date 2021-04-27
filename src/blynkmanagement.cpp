@@ -72,7 +72,7 @@ void blynkUpdateGrid()
 
 void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
 {
-    char *text = "Unknown";
+    char const *text = "Unknown";
     switch (type)
     {
     case BATTERY_STATUS:
@@ -126,27 +126,46 @@ void blynkUpdateChargeController() {
     }
 }
 
+
+void blynkUpdateInverter()
+{
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_POWER,gInverterPower);
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_CURRENT,gInverterCurrent);
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_VOLTAGE,gInverterVoltage);
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_POWER_FACTOR,gInverterPowerFactor);
+     
+}
+
 void blynkSetup()
 {
-    if(strlen(blynkTokenValue) != 32) {
-        blynkTokenValue[0]= 0;
-    } else {
+    if (strlen(blynkTokenValue) != 32)
+    {
+        blynkTokenValue[0] = 0;
+    }
+    else
+    {
         Blynk.config(blynkTokenValue, blynkServerValue, atoi(blynkPortValue));
     }
 
-    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateGrid) <0 ) {
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateGrid) < 0)
+    {
         Serial.println("Cannot create blynk grid update timer");
     }
 
     if (gChargerNumValidChargers > 0)
-        if (blynkUpdateTimer.setInterval(2500, blynkUpdateChargeController) < 0)
+    {
+        if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateChargeController) < 0)
         {
             Serial.println("Cannot create blynk charge controller 1 timer");
         }
+    }
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateInverter) < 0)
+    {
+        Serial.println("Cannot create blynk blynkUpdateInverter update timer");
+    }
     
     blynkUpdateTimer.disableAll();
 }
-
 
 bool isValid() {
     return blynkTokenValue[0] != 0 && WiFi.isConnected();
@@ -156,6 +175,7 @@ BLYNK_CONNECTED() {
 #if DEBUG
     Serial.println("Blynk connected");
     Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);
+    Blynk.virtualWrite(BLYNK_VPIN_PID_ENABLE, PIDEnabled() ? 1 : 0);
 #endif
     blynkUpdateTimer.enableAll();
 }
@@ -239,4 +259,19 @@ BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
     gInverterGridPowerUpdated();    
 }
 
+BLYNK_WRITE(BLYNK_VPIN_DUTY_CYCLE)
+{
+   
+}
+
+BLYNK_WRITE(BLYNK_VPIN_PID_ENABLE)
+{
+    if (param.asInt() == 1) 
+    {
+        startPID();
+    }
+    else {
+        stopPID();
+    }
+}
 #endif
