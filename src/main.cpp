@@ -5,6 +5,7 @@
 #include "mqttmanagement.h"
 #include "invertermanagement.h"
 #include "chargeControllerManagement.h"
+#include "ssrManagement.h"
 
 
 void setup() {
@@ -15,15 +16,12 @@ void setup() {
   Serial.println(xPortGetCoreID());
 
   inverterPreInit();
-  gSerial2Mutex = xSemaphoreCreateMutex();
-  if(gSerial2Mutex == NULL) {
-    Serial.println("Could not allocate mutex");
-  }
   wifiSetup();
   mqttSetup();
   chargeControllerSetup();
   inverterSetup();  
   blynkSetup(); // This should be last, in order to have all data available
+  ssrSetup();
 }
 
 // This one is executed on CPU 1
@@ -31,6 +29,7 @@ void loop() {
   unsigned long now = millis();
   wifiLoop(now);
   blynkLoop(now);
+  ssrLoop(now);
 }
 
 

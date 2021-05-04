@@ -16,16 +16,15 @@ char mqttUserPasswordValue[STRING_LEN];
 char mqttEM3Name[STRING_LEN] = "shellyem3-8CAAB561991E";
 int mqttEM3NameLength = 0;
 
-char mqttEM3Topic[STRING_LEN] = "/emeter/+/power";
+char mqttEM3Topic[STRING_LEN] = "/emeter/+/";
 static int legPosInMessage = -1;
-
-static float lastGridSumPower = 0.0;
-#define NOTIFY_DELTA (float)1.0
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 static long lastReconnectAttempt = 0;
+
+static const char *topics[ValueNumValues] = {"power","current","voltage", "pf"};
 
 #if DEBUG
 static bool _mqttEnabled = true;
@@ -52,23 +51,28 @@ bool mqttEnabled() { return _mqttEnabled; }
 #endif
 
 bool mqttReconnect()
-{
+{    
     if (WiFi.isConnected() && mqttClient.connect(thingName))
     {
         // Once connected, publish an announcement...
         mqttClient.publish(thingName, "connected");
         // ... and resubscribe
-        String subscription("shellies/");
-        subscription += mqttEM3Name;
-        subscription += mqttEM3Topic;
+        String subscriptionBase("shellies/");
+        subscriptionBase += mqttEM3Name;
+        subscriptionBase += "/emeter/+/";
 
-        Serial.println("Subscribing to ");
-        Serial.println(subscription);
-        
-        if (!mqttClient.subscribe(subscription.c_str()))
+        for (int i = 0; i < ValueNumValues; ++i)
         {
-            Serial.print("MQQT Subscribe failed\n Topic:");
+            String subscription = subscriptionBase + topics[i];
+#if DEBUG
+            Serial.println("Subscribing to ");
             Serial.println(subscription);
+#endif
+            if (!mqttClient.subscribe(subscription.c_str()))
+            {
+                Serial.print("MQQT Subscribe failed\n Topic:");
+                Serial.println(subscription);
+            }
         }
     }
     return mqttClient.connected();
@@ -76,40 +80,59 @@ bool mqttReconnect()
 
 static void parseEm3Result(const char *txt, const char *payload)
 {
-    
+
     int aLeg = txt[legPosInMessage] - 48;
     float aValue = atof(payload);
 
-        if( aLeg <0 || aLeg > 2 || aValue == 0.0 )
-        {
+    if (aLeg < 0 || aLeg > 2 || aValue == 0.0)
+    {
 #if DEBUG
-            Serial.println("Could not parse message from EM3");
-            Serial.print(txt[legPosInMessage]);
-            Serial.print(" : ");
-            Serial.println(payload);
-            Serial.print(aLeg);
-            Serial.print(" : ");
-            Serial.println(aValue);
+        Serial.println("Could not parse message from EM3");
+        Serial.print(txt[legPosInMessage]);
+        Serial.print(" : ");
+        Serial.println(payload);
+        Serial.print(aLeg);
+        Serial.print(" : ");
+        Serial.println(aValue);
 #endif
-        }
-        else
+    }
+    else
+    {
+        const char *valueType = txt + legPosInMessage + 2;
+        uint i;
+        for (i = 0; i < ValueNumValues; ++i)
         {
-            gGridLegsPower[aLeg] = aValue;
-            gGridSumPower = gGridLegsPower[0] + gGridLegsPower[1] + gGridLegsPower[2];            
-#if DEBUG
+            if (!strcmp(valueType, topics[i]))
+            {
+                gGridLegValues[i][aLeg] = aValue;
+                gGridSumValues[i] = gGridLegValues[i][0] + gGridLegValues[i][1] + gGridLegValues[i][2];
+                gInverterGridPowerUpdated();
+                break;
+            }
+        }
+#if DEBUG_ON
+
+        if (i < ValueNumValues)
+        {
             Serial.print("Leg ");
             Serial.print(aLeg);
             Serial.print(": ");
             Serial.print(aValue);
             Serial.print(" Sum: ");
-            Serial.println(gGridSumPower);
-#endif
+            Serial.println(gGridSumValues[i]);
         }
+        else
+        {
+            Serial.print("Unknown topic ");
+            Serial.println(valueType);
+        }
+#endif        
+    }
 }
 
 void mqttHandleMessage(const char *topic, byte *payload, unsigned int length)
 {
-#if DEBUG
+#if DEBUG_ON
     Serial.print("Message arrived [");
     Serial.print(topic);
     Serial.print("] ");
@@ -140,9 +163,9 @@ void mqttSetupMqtt() {
     int port = String(mqttPortValue).toInt();
     if(port == 0) port = 1883;
     mqttEM3NameLength = strlen(mqttEM3Name);
-    const char *position = strchr(mqttEM3Topic, '+');
+    const char *position = strchr("/emeter/+/", '+');
     if (position) {
-        legPosInMessage = (position - mqttEM3Topic) + mqttEM3NameLength + 9; // 9 is the lenth of "shellies/"
+        legPosInMessage = mqttEM3NameLength + 9 + 8; // 9 is the lenth of "shellies/" and "/emeter/"
     } else {
         legPosInMessage = -1;
     }
@@ -180,13 +203,7 @@ static void mqttLoop()
             do
             {
                 mqttClient.loop();
-            } while (wifiClient.available());
-
-            if (abs(gGridSumPower - lastGridSumPower) > NOTIFY_DELTA)
-            {
-                lastGridSumPower = gGridSumPower;
-                gInverterGridPowerUpdated();                
-            }
+            } while (wifiClient.available());                                                  
         }
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(500));
     }

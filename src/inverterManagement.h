@@ -2,13 +2,21 @@
 
 #include "common.h"
 
+// Thepin the inverter is connected to
 #define INVERTERPIN 4
 
-// The values for the three grid legs
-extern float gGridLegsPower[3];
+enum EGridValueTypes {
+    ValuePower = 0,
+    ValueCurrent = 1,
+    ValueVoltage = 2,
+    ValuePowerFactor = 3,
+    ValueNumValues
+};
 
-// The sum of used power
-extern float gGridSumPower;
+// This contains all lage values of the different 
+// Types
+extern float gGridLegValues[ValueNumValues][3];
+extern float gGridSumValues[ValueNumValues];
 
 // The current power output of the inverter
 extern double gInverterPower;
@@ -29,6 +37,9 @@ extern long gInverterTimeout;
 // Setting this to true forces the iverter's output to 0
 extern bool gInverterShutdown;
 
+// Is true, the charge controllers should stay active even if battery is full
+extern bool gInverterExcessToGrid;
+
 // Initializes the inverter. It starts wit 0 output
 extern void inverterSetup();
 
@@ -41,7 +52,8 @@ extern char gInverterTimeoutValue[NUMBER_LEN];
 extern char gInverterEmergencyTargetValue[NUMBER_LEN];
 extern char gSendExcessToGrid[NUMBER_LEN];
 extern char gInverterUpdateIntervalValue[NUMBER_LEN];
-extern char gInverterModbusId[NUMBER_LEN];
+extern char gInverterLegValue[NUMBER_LEN] ;
+
 
 extern TaskHandle_t gInverterTaskHandle;
 
@@ -57,9 +69,3 @@ extern void gInverterGridPowerUpdated();
 
 // Check in Inverer is forced to 0
 #define inverterLocked() (gInverterShutdown == true)
-
-#if DEBUG
-extern void stopPID();
-extern void startPID();
-extern bool PIDEnabled();
-#endif

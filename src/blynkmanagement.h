@@ -6,8 +6,6 @@
 
 #if DEBUG
 #define BLYNK_VPIN_MQTT_ENABLE V50
-#define BLYNK_VPIN_PID_ENABLE V51
-#define BLYNK_VPIN_DUTY_CYCLE V52
 
 #endif
 
@@ -22,6 +20,9 @@
 #define BLYNK_VPIN_INVERTER_CURRENT      (BLYNK_VPIN_INVERTER_POWER+1)
 #define BLYNK_VPIN_INVERTER_VOLTAGE      (BLYNK_VPIN_INVERTER_CURRENT+1)
 #define BLYNK_VPIN_INVERTER_POWER_FACTOR (BLYNK_VPIN_INVERTER_VOLTAGE+1)
+
+#define CHARGER_1_VPIN_SWITCH  V40
+#define CHARGER_2_VPIN_SWITCH V41
 
 // Charger ID can be either 0 or 1
 // VPIN is the index of the pin of the controller (0...n) to address.

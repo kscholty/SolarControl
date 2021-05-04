@@ -1,0 +1,10 @@
+
+
+Ein Starng hat eine leerlaufspannung von 126V
+
+ollen wir das messen und benötigen eine SPnnung von höchstens 3,33V, kommt z.B. folgender Spannungsteiler in Frage
+
+1MOhm und 20 KOhm (also 2*10)
+Ergibt dann eine Spannungsteilung 123,53+2,47
+
+Dabei fließt dann ein Strom von 0,123mA und damit eine Leistung von 15,56 mW

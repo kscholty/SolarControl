@@ -4,6 +4,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>          //https://github.com/esp8266/Arduino
 
+#include <time.h>
 //needed for library
 #include <DNSServer.h>
 #include <WebServer.h>
@@ -16,6 +17,7 @@
 #include "mqttmanagement.h"
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
+#include "ssrManagement.h"
 
 
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
@@ -58,11 +60,11 @@ IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server",
 IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, NUMBER_LEN, mqttPortValue);
 IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("MQTT user", "mqttUser", mqttUserNameValue, STRING_LEN);
 IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("MQTT password", "mqttPass", mqttUserPasswordValue, STRING_LEN);
-IotWebConfTextParameter mqttEm3NameParam = IotWebConfPasswordParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
-IotWebConfTextParameter mqttEm3TopicParam = IotWebConfPasswordParameter("EM3 Topic", "em3topic", mqttEM3Topic, STRING_LEN, mqttEM3Topic);
+IotWebConfTextParameter mqttEm3NameParam = IotWebConfTextParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
+
 
 IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
-
+IotWebConfNumberParameter inverterLegParam = IotWebConfNumberParameter("Inverter leg", "invLeg", gInverterLegValue, STRING_LEN, gInverterLegValue);
 IotWebConfNumberParameter inverterUpdateIntervalParam = IotWebConfNumberParameter("Inverter update interval [ms]", "invUp", gInverterUpdateIntervalValue, NUMBER_LEN, gInverterUpdateIntervalValue);
 IotWebConfNumberParameter inverterTargetValueParam = IotWebConfNumberParameter("Inverter Offset [W]", "invOff", gInverterOffsetValue, NUMBER_LEN, gInverterOffsetValue);
 IotWebConfNumberParameter inverterTimeoutParam = IotWebConfNumberParameter("Inverter Timeout [ms]", "invTimeout", gInverterTimeoutValue, NUMBER_LEN, gInverterTimeoutValue);
@@ -74,9 +76,19 @@ IotWebConfNumberParameter charger1Id = IotWebConfNumberParameter("Charger 1 Modb
 IotWebConfNumberParameter charger2Id = IotWebConfNumberParameter("Charger 2 ModbusId", "ch2modbus", gChargerModbusAdressesValue[1], 4);
 IotWebConfNumberParameter chargerUdpateInterval = IotWebConfNumberParameter("Charger upd. interval [s]", "chupd", gChargerUpdateIntervalValue, sizeof(gChargerUpdateIntervalValue), gChargerUpdateIntervalValue);
 
+IotWebConfParameterGroup dayNightGroup = IotWebConfParameterGroup("Values for handling activation of components");
+IotWebConfTextParameter ntpServerNameParam = IotWebConfTextParameter("NTP server", "ntpserver", gNtpServerValue, STRING_LEN,gNtpServerValue);
+IotWebConfTextParameter timezoneParam = IotWebConfTextParameter("Time offset to GMT [h]", "TZ", gTimezoneValue, NUMBER_LEN, gTimezoneValue);
+IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Latitude", "lat", gLatitudeValue, STRING_LEN, gLatitudeValue);
+IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Longitude", "lon", gLongitudeValue, STRING_LEN, gLongitudeValue);
+
+
+
 void wifiConnected()
 {
-
+  if(strlen(gNtpServerValue)) {
+    configTime(atoi(gTimezoneValue)*3600, 0, gNtpServerValue);
+  }
 }
 
 void wifiSetup()
@@ -90,8 +102,8 @@ void wifiSetup()
   mqttGroup.addItem(&mqttUserNameParam);
   mqttGroup.addItem(&mqttUserPasswordParam);
   mqttGroup.addItem(&mqttEm3NameParam);
-  mqttGroup.addItem(&mqttEm3TopicParam);
 
+  inverterGroup.addItem(&inverterLegParam);
   inverterGroup.addItem(&inverterUpdateIntervalParam);
   inverterGroup.addItem(&inverterTargetValueParam);
   inverterGroup.addItem(&inverterTimeoutParam);
@@ -103,6 +115,13 @@ void wifiSetup()
   chargerGroup.addItem(&charger2Id);
   chargerGroup.addItem(&chargerUdpateInterval);
 
+
+  dayNightGroup.addItem(&ntpServerNameParam);
+  dayNightGroup.addItem(&timezoneParam);
+  dayNightGroup.addItem(&latitudeParam);
+  dayNightGroup.addItem(&longitudeParam);
+
+
   iotWebConf.setStatusPin(STATUS_PIN);
   iotWebConf.setConfigPin(CONFIG_PIN);
 
@@ -110,6 +129,7 @@ void wifiSetup()
   iotWebConf.addParameterGroup(&blynkGroup);
   iotWebConf.addParameterGroup(&inverterGroup);
   iotWebConf.addParameterGroup(&chargerGroup);
+  iotWebConf.addParameterGroup(&dayNightGroup);
 
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
@@ -153,9 +173,21 @@ void handleRoot()
     // -- Captive portal request were already served.
     return;
   }
+
+  struct tm timeinfo;
+  char tod[128];
+  if(getLocalTime(&timeinfo)){
+    strftime(tod,128,"%A, %B %d %Y %H:%M:%S",&timeinfo) ;
+  } else {
+    strcpy(tod,"unknown");
+  }
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+
   String s = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/>";
-  s += "<title>Solar controller</title></head><body>Values";
-  s += "<ul>";
+  s += "<title>Solar controller</title></head><body>";
+  s += "Current time: ";
+  s += String(tod);
+  s += "<br><br><b>Values</b> <ul>";
   s += "<li>MQTT server: ";
   s += mqttServerValue;
   s += "<li>Blynk server: ";
@@ -202,9 +234,9 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 
   
   
-  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 10)
+  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 20)
   {
-    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 10";
+    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 20";
     result = false;
   }
 
@@ -221,8 +253,9 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
     result = false;
   }
 
-  if (server.arg(mqttEm3TopicParam.getId()).indexOf('+') < 0) {
-    mqttEm3TopicParam.errorMessage = "MQQT topic should cotain placeholder '+'";
+  l = server.arg(inverterLegParam.getId()).toInt();
+  if (l < 1  || l> 3) {
+    inverterLegParam.errorMessage = "Leg for inverter must e between 1 and 3'";
     result = false;
   }
 
@@ -255,6 +288,13 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
       result = false;
     }
   }
+
+  l = server.arg(timezoneParam.getId()).toInt();
+  if(l<-12 || l>12 ) {
+      timezoneParam.errorMessage = "Timezone offset must be between -12h and 12h";
+      result = false;
+  }
+  
 
   return result;
   }

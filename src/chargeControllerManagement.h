@@ -3,7 +3,13 @@
 
 #include "common.h"
 
-#define NUM_CHARGERS 2
+enum CHARGERS {
+    CHARGER_1=0,
+    CHARGER_2=1,
+    NUM_CHARGERS
+};
+
+
 enum ChargerValues_t
 {
     PV_CURRENT = 0,
@@ -35,4 +41,5 @@ extern unsigned int gChargerNumValidChargers;
 extern unsigned long gChargerUpdateIntervalMilis;
 
 extern void chargeControllerSetup();
-extern bool chargerIsValid(int index);
+extern bool chargerIsValid(CHARGERS charger);
+inline bool chargerIsValid(int i) { return chargerIsValid((CHARGERS)i);}

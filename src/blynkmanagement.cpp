@@ -14,6 +14,7 @@
 #include "inverterManagement.h"
 #include "mqttmanagement.h"
 #include "chargeControllerManagement.h"
+#include "ssrManagement.h"
 
 char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
@@ -64,10 +65,10 @@ void blynkUpdateGrid()
 #if DEBUG
     Serial.println("Updating grid data on Blynk");
 #endif
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegsPower[0]);
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegsPower[1]);
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegsPower[2]);
-    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumPower);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegValues[ValuePower][0]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegValues[ValuePower][1]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegValues[ValuePower][2]);
+    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumValues[ValuePower]);
 }
 
 void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
@@ -106,6 +107,9 @@ void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
 
 void blynkUpdateChargeController() {
     static int index = 0;
+
+    Blynk.virtualWrite(CHARGER_1_VPIN_SWITCH,chargerStatus(CHARGER_1)?1:0);
+    Blynk.virtualWrite(CHARGER_2_VPIN_SWITCH,chargerStatus(CHARGER_2)?1:0);
 
     if (gChargerValuesChanged[index])
     {
@@ -174,8 +178,7 @@ bool isValid() {
 BLYNK_CONNECTED() {
 #if DEBUG
     Serial.println("Blynk connected");
-    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);
-    Blynk.virtualWrite(BLYNK_VPIN_PID_ENABLE, PIDEnabled() ? 1 : 0);
+    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);    
 #endif
     blynkUpdateTimer.enableAll();
 }
@@ -221,22 +224,41 @@ void blynkLoop(unsigned long now)
 
 BLYNK_READ(BLYNK_VPIN_LEG_0)
 {
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegsPower[0]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegValues[ValuePower][0]);
 }
 
 BLYNK_READ(BLYNK_VPIN_LEG_1)
 {
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegsPower[1]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegValues[ValuePower][1]);
 }
 
 BLYNK_READ(BLYNK_VPIN_LEG_2)
 {
-    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegsPower[2]);
+    Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegValues[ValuePower][2]);
 }
 
 BLYNK_READ(BLYNK_VPIN_ALL_LEGS)
 {
-    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumPower);
+    Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumValues[ValuePower]);
+}
+
+#if NEVER
+#include "calibration.h"
+BLYNK_WRITE(BLYNK_VPIN_CALIBRATE_ADC)
+{
+     if (param.asInt() == 1) 
+        adcStartCalibration();
+}
+#endif
+
+BLYNK_WRITE(CHARGER_1_VPIN_SWITCH)
+{
+    ssrSwitch(CHARGER_1,param.asInt() == 1);
+}
+
+BLYNK_WRITE(CHARGER_2_VPIN_SWITCH)
+{
+    ssrSwitch(CHARGER_2,param.asInt() == 1);
 }
 
 #if DEBUG
@@ -255,23 +277,8 @@ BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 
 BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
 {
-    gGridSumPower = param.asInt();
+    gGridSumValues[ValuePower] = param.asFloat();
     gInverterGridPowerUpdated();    
 }
 
-BLYNK_WRITE(BLYNK_VPIN_DUTY_CYCLE)
-{
-   
-}
-
-BLYNK_WRITE(BLYNK_VPIN_PID_ENABLE)
-{
-    if (param.asInt() == 1) 
-    {
-        startPID();
-    }
-    else {
-        stopPID();
-    }
-}
 #endif

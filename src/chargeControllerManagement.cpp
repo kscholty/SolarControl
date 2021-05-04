@@ -19,8 +19,8 @@ unsigned long gChargerUpdateIntervalMilis = 15000;
 
 unsigned int chargerValues[NUM_CHARGERS][NUM_CHARGER_VALUES];
 
-bool chargerIsValid(int index) {
-        return chargerValid(index);
+bool chargerIsValid(CHARGERS charger) {
+        return chargerValid(charger);
 }
 
 static unsigned int calculateChargerIds() {
@@ -38,7 +38,9 @@ static unsigned int calculateChargerIds() {
 }
 
 static void chargeControllerSetupController()
-{        
+{
+
+        Serial2.begin(BAUDRATE);
         for (int i = 0; i < NUM_CHARGERS; ++i)
         {
                 if (chargerValid(i))
@@ -87,7 +89,12 @@ static bool readPvAndBattery(uint index)
                 Serial.print("PV Power: ");
                 Serial.println(chargerValues[index][PV_POWER]);
 #endif
-                chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                if(chargerValues[index][BATTERY_CHARGE_CURRENT]>0)
+                {
+                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                } else {
+                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0 ;
+                }
 #if DEBUG
                 Serial.print("Battery Charge Voltage: ");
                 Serial.println(chargerValues[index][PV_POWER]);
@@ -174,32 +181,21 @@ void chargeControllerThradFunc(void *)
 #endif
                 // That is an error and shouldn't happen!
                 vTaskDelete(xTaskGetCurrentTaskHandle());
-        }        
+        }
         chargeControllerSetupController();
         TickType_t previousTime = xTaskGetTickCount();
         while (true)
         {
                 vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(gChargerUpdateIntervalMilis - 100));
-                if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(3000)) == pdTRUE)
+
+                for (int i = 0; i < NUM_CHARGERS; ++i)
                 {
-                        Serial2.updateBaudRate(BAUDRATE);
-                        for (int i = 0; i < NUM_CHARGERS; ++i)
+                        if (chargerValid(i))
                         {
-                                if (chargerValid(i))
-                                {
-                                        vTaskDelay(pdMS_TO_TICKS(100));
-                                        updateController(i);
-                                }
+                                vTaskDelay(pdMS_TO_TICKS(100));
+                                updateController(i);
                         }
-                        Serial2.updateBaudRate(9600);
-                        xSemaphoreGive(gSerial2Mutex);
                 }
-#if DEBUG
-                else
-                {
-                        Serial.println("Could not acquire Serial 2 mutex for charger update");
-                }
-#endif
         }
 }
 
