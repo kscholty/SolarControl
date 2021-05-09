@@ -21,7 +21,7 @@ void setup() {
   chargeControllerSetup();
   inverterSetup();  
   blynkSetup(); // This should be last, in order to have all data available
-  ssrSetup();
+  //ssrSetup();
 }
 
 // This one is executed on CPU 1
@@ -29,7 +29,7 @@ void loop() {
   unsigned long now = millis();
   wifiLoop(now);
   blynkLoop(now);
-  ssrLoop(now);
+  //ssrLoop(now);
 }
 
 

@@ -42,17 +42,17 @@ struct bufStruct {
     char buffer[READ_LEN];
 };
 
-void readAdc(void *);
+IRAM_ATTR void readAdc(void *);
 void calculate(bufStruct *);
 
 // The sum of suared values. Basis for 
 // calculation of root...
-static double  avgSquareSum = 0;
+ICACHE_RAM_ATTR static double  avgSquareSum = 0;
 
 static TaskHandle_t readTask = NULL;
 static xQueueHandle mutex;
 //static xQueueHandle i2s_event_queue;
-static double oldVals[ADC_AVERAGE_COUNT];
+ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT];
 int oldValsPos = 0;
 
 static volatile bool stopAdcUsage=false;
@@ -264,12 +264,10 @@ void readAdc(void *buffer)
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
     bufStruct *i2s_read_buff = (bufStruct *)buffer;
-    i2s_event_type_t event = I2S_EVENT_MAX;
     Serial.println("ADC thread entering loop...");
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
-       //if (xQueueReceive(i2s_event_queue, &event, portMAX_DELAY) == pdTRUE && event == I2S_EVENT_RX_DONE)
         {
             //read data from I2S bus, in this case, from ADC.
             i2s_read(I2S_NUM, i2s_read_buff->buffer, READ_LEN, &i2s_read_buff->count, portMAX_DELAY);
@@ -295,7 +293,9 @@ void calculate(bufStruct *i2s_read_buff)
 
     double sum = 0.0;
 
+#if DEBUG
     unsigned long start = millis();
+#endif 
 
     size_t count = i2s_read_buff->count / sizeof(int16_t);
     uint16_t *buffer = (uint16_t *)i2s_read_buff->buffer;
@@ -330,7 +330,7 @@ void calculate(bufStruct *i2s_read_buff)
         // We know that the voltage is between 0 and 3333mV
         // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1629
         // We can assume 1629 == 0A. So
-        // (val-1629)/1629*10
+        // (val-1631)/1631*10
         #define ZERO_V 1631
         #define MAX_A 6.66
         val = val * (MAX_A / ZERO_V) - MAX_A;

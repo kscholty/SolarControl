@@ -91,7 +91,7 @@ static bool readPvAndBattery(uint index)
 #endif
                 if(chargerValues[index][BATTERY_CHARGE_CURRENT]>0)
                 {
-                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] *100 / chargerValues[index][BATTERY_CHARGE_CURRENT];
                 } else {
                         chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0 ;
                 }

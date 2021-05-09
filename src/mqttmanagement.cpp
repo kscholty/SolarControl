@@ -106,6 +106,9 @@ static void parseEm3Result(const char *txt, const char *payload)
             {
                 gGridLegValues[i][aLeg] = aValue;
                 gGridSumValues[i] = gGridLegValues[i][0] + gGridLegValues[i][1] + gGridLegValues[i][2];
+                if(i == ValuePowerFactor && gGridLegValues[i] < 0) {
+                    gGridLegValues[i][aLeg] = fabs(gGridLegValues[i][aLeg]);
+                }
                 gInverterGridPowerUpdated();
                 break;
             }

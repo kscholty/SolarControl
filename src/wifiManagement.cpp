@@ -1,6 +1,7 @@
 
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <esp_wifi.h>
 #include <WiFi.h>          //https://github.com/esp8266/Arduino
 
@@ -11,6 +12,7 @@
 
 #include <IotWebConf.h>
 #include <IotWebConfUsing.h> // This loads aliases for easier class names.
+
 
 #include "wifimanagement.h"
 #include "blynkmanagement.h"
@@ -81,6 +83,8 @@ IotWebConfTextParameter ntpServerNameParam = IotWebConfTextParameter("NTP server
 IotWebConfTextParameter timezoneParam = IotWebConfTextParameter("Time offset to GMT [h]", "TZ", gTimezoneValue, NUMBER_LEN, gTimezoneValue);
 IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Latitude", "lat", gLatitudeValue, STRING_LEN, gLatitudeValue);
 IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Longitude", "lon", gLongitudeValue, STRING_LEN, gLongitudeValue);
+IotWebConfTextParameter inveterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
+
 
 
 
@@ -89,6 +93,7 @@ void wifiConnected()
   if(strlen(gNtpServerValue)) {
     configTime(atoi(gTimezoneValue)*3600, 0, gNtpServerValue);
   }
+   ArduinoOTA.begin();
 }
 
 void wifiSetup()
@@ -154,6 +159,7 @@ void wifiLoop(unsigned long now)
 {
   // -- doLoop should be called as frequently as possible.
   iotWebConf.doLoop();
+  ArduinoOTA.handle();
 
   if(needReset) {
       Serial.println("Rebooting after 1 second.");
@@ -255,7 +261,7 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 
   l = server.arg(inverterLegParam.getId()).toInt();
   if (l < 1  || l> 3) {
-    inverterLegParam.errorMessage = "Leg for inverter must e between 1 and 3'";
+    inverterLegParam.errorMessage = "Leg for inverter must be between 1 and 3'";
     result = false;
   }
 

@@ -20,7 +20,7 @@ char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
 char blynkPortValue[NUMBER_LEN] = "80";
 static long lastReconnectAttempt = 0;
-static long blynkUpdateInterval = 20000;
+static long blynkUpdateInterval = 15000;
 static SimpleTimer blynkUpdateTimer;
 
 
@@ -156,6 +156,7 @@ void blynkSetup()
         Serial.println("Cannot create blynk grid update timer");
     }
 
+    delay(1000); 
     if (gChargerNumValidChargers > 0)
     {
         if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateChargeController) < 0)
@@ -163,6 +164,7 @@ void blynkSetup()
             Serial.println("Cannot create blynk charge controller 1 timer");
         }
     }
+    delay(1000);
     if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateInverter) < 0)
     {
         Serial.println("Cannot create blynk blynkUpdateInverter update timer");
@@ -177,17 +179,15 @@ bool isValid() {
 
 BLYNK_CONNECTED() {
 #if DEBUG
-    Serial.println("Blynk connected");
-    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);    
+    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);  
 #endif
+    Serial.println("Blynk connected");    
     blynkUpdateTimer.enableAll();
 }
 
 BLYNK_DISCONNECTED()
 {
-#if DEBUG
     Serial.println("Blynk disconnected");
-#endif
     blynkUpdateTimer.disableAll();
 }
 

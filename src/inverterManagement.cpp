@@ -77,7 +77,7 @@ static void inverterSetupInverter()
 
     inverterEmergencyTarget = atoi(gInverterEmergencyTargetValue);    
     inverterUpdateInterval = atoi(gInverterUpdateIntervalValue);
-    inverterLeg = atoi(gInverterLegValue);
+    inverterLeg = atoi(gInverterLegValue)-1;
 
     useInverterOutput = true;
 

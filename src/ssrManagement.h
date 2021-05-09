@@ -17,8 +17,10 @@ extern void ssrSetup();
 extern void ssrLoop(unsigned long);
 
 
+extern char ginverterShellyValue[STRING_LEN];
 extern char gNtpServerValue[STRING_LEN];
 extern char gTimezoneValue[NUMBER_LEN];
 extern char gLatitudeValue[NUMBER_LEN];
 extern char gLongitudeValue[NUMBER_LEN];
+
 
