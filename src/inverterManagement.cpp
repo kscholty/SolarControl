@@ -121,7 +121,8 @@ void gInverterGridPowerUpdated() {
 
 bool ReadInverter() {
     gInverterCurrent =  adcGetCurrent();    
-    gInverterPower = gInverterCurrent*gInverterVoltage * gInverterPowerFactor;  // Use grid values later on
+    //gInverterPower = gInverterCurrent*gInverterVoltage * gInverterPowerFactor; 
+    gInverterPower = gInverterCurrent*gInverterVoltage;  
 
     return true;   
 }

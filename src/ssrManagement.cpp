@@ -1,6 +1,6 @@
 
-
-#include <Dusk2Dawn.h>
+#include "Arduino.h"
+//#include <Dusk2Dawn.h>
 
 #include "common.h"
 #include "ssrManagement.h"
@@ -92,6 +92,7 @@ void handleBatteryEmpty() {
 
 static DayNightEventType dayNightCalcEvents()
  {
+   #if 0
    struct tm now;
    time_t sinceMidnight;
    int sunrise, sunset;
@@ -146,8 +147,9 @@ static DayNightEventType dayNightCalcEvents()
    } else {
        DailyEvents[EvUnknown] = millis()+10000;
    }
-
    return ret;
+#endif
+   return EvUnknown;
  }
 
 static void onSunset()

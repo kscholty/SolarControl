@@ -5,6 +5,7 @@
 #include "mqttmanagement.h"
 #include "invertermanagement.h"
 #include "chargeControllerManagement.h"
+#include "bmsManagement.h"
 #include "ssrManagement.h"
 
 
@@ -15,20 +16,21 @@ void setup() {
   Serial.print("Starting up at core");
   Serial.println(xPortGetCoreID());
 
-  inverterPreInit();
-  wifiSetup();
-  mqttSetup();
-  chargeControllerSetup();
-  inverterSetup();  
-  blynkSetup(); // This should be last, in order to have all data available
+  //inverterPreInit();
+  //wifiSetup();
+  //mqttSetup();
+  //chargeControllerSetup();
+  //inverterSetup();  
+  bmsSetup();
+  //blynkSetup(); // This should be last, in order to have all data available
   //ssrSetup();
 }
 
 // This one is executed on CPU 1
 void loop() {
   unsigned long now = millis();
-  wifiLoop(now);
-  blynkLoop(now);
+  //wifiLoop(now);
+  //blynkLoop(now);
   //ssrLoop(now);
 }
 
