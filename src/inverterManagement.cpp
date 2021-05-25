@@ -38,11 +38,11 @@ double gInverterPower = 0.0;
 float gInverterCurrent = 0.0;
 float gInverterVoltage = 0.0;
 float gInverterPowerFactor = 0.0;
+float gInverterTarget = 0.0f;
 
 bool gInverterExcessToGrid = false;
 
 static float inverterOffset = 0;
-static double inverterTarget = 0.0f;
 static uint inverterLeg = 2;
 
 static long lastGridUpdateReceived = 0;
@@ -86,7 +86,7 @@ static void inverterSetupInverter()
         inverterUpdateInterval = 10;
     }
 
-    inverterTarget = inverterEmergencyTarget;
+    gInverterTarget = inverterEmergencyTarget;
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
 
@@ -103,7 +103,7 @@ static void inverterSetupInverter()
     {
         // We have no access to the inverter
         // So our grid target is always inverterOffset
-        inverterTarget = inverterOffset;
+        gInverterTarget = inverterOffset;
     }
 }
 
@@ -114,7 +114,7 @@ void gInverterGridPowerUpdated() {
 
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
-    inverterTarget = gGridSumValues[ValuePower]+gInverterCurrent-inverterOffset;
+    gInverterTarget = gGridSumValues[ValuePower]+gInverterCurrent-inverterOffset;
     lastGridUpdateReceived = millis();   
 }
 
@@ -137,7 +137,7 @@ static void inverterLoop()
         {
             // MQTT has a problem it seems...
             // So let's go to our  default output
-            inverterTarget = inverterEmergencyTarget;
+            gInverterTarget = inverterEmergencyTarget;
 #if DEBUG
             //Serial.println("Inverter detected timeout. MQTT not running");
 #endif
@@ -152,7 +152,7 @@ static void inverterLoop()
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
                 ReadInverter();
-                if (gInverterPower < inverterTarget)
+                if (gInverterPower < gInverterTarget)
                 {
                     pinValue = HIGH;
                 }
@@ -180,7 +180,7 @@ static void inverterLoop()
         {
             lastPrint = millis();
             Serial.print(" Z: ");
-            Serial.print(inverterTarget);
+            Serial.print(gInverterTarget);
             Serial.print(" I: ");
             Serial.print(gInverterPower);
             Serial.print(" C ");
@@ -196,8 +196,6 @@ static void inverterThradFunc(void *)
     inverterSetupInverter();
     inverterLoop();
 }
-
-
 
 void inverterSetup()
 {    

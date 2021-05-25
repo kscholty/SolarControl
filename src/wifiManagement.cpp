@@ -20,6 +20,7 @@
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
 #include "ssrManagement.h"
+#include "bmsManagement.h"
 
 
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
@@ -85,7 +86,9 @@ IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Latitude", "lat
 IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Longitude", "lon", gLongitudeValue, STRING_LEN, gLongitudeValue);
 IotWebConfTextParameter inveterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
 
-
+IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("Values for handling the BMS");
+IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Hardware Address of BLE dongle", "bmsad", gBmsServerNameValue, STRING_LEN,gBmsServerNameValue,gBmsServerNameValue);
+IotWebConfNumberParameter bmsUdpateInterval = IotWebConfNumberParameter("BMS upd. interval [ms]", "bmsupd", gBmsUpdateIntervalValue, sizeof(gBmsUpdateIntervalValue), gBmsUpdateIntervalValue);
 
 
 void wifiConnected()
@@ -125,7 +128,9 @@ void wifiSetup()
   dayNightGroup.addItem(&timezoneParam);
   dayNightGroup.addItem(&latitudeParam);
   dayNightGroup.addItem(&longitudeParam);
-
+  
+  bmsGroup.addItem(&bmsBLEAddressParam);
+  bmsGroup.addItem(&bmsUdpateInterval);
 
   iotWebConf.setStatusPin(STATUS_PIN);
   iotWebConf.setConfigPin(CONFIG_PIN);
@@ -135,6 +140,7 @@ void wifiSetup()
   iotWebConf.addParameterGroup(&inverterGroup);
   iotWebConf.addParameterGroup(&chargerGroup);
   iotWebConf.addParameterGroup(&dayNightGroup);
+  iotWebConf.addParameterGroup(&bmsGroup);
 
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
@@ -300,7 +306,20 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
       timezoneParam.errorMessage = "Timezone offset must be between -12h and 12h";
       result = false;
   }
+
+  l = server.arg(bmsUdpateInterval.getId()).toInt();
+  if (l < 500 )
+  {
+    bmsUdpateInterval.errorMessage = "BMS update rate may not be smaller than 500 ms";
+    result = false;
+  }
   
+  l = server.arg(bmsBLEAddressParam.getId()).length();
+  if ( l != 0 && l != 17)
+  {
+    bmsBLEAddressParam.errorMessage = "BMS BLE donbgle address invalid";
+    result = false;
+  }
 
   return result;
   }

@@ -13,24 +13,22 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println();
-  Serial.print("Starting up at core");
-  Serial.println(xPortGetCoreID());
-
-  //inverterPreInit();
-  //wifiSetup();
-  //mqttSetup();
-  //chargeControllerSetup();
-  //inverterSetup();  
+  
+  inverterPreInit();
+  wifiSetup();
+  mqttSetup();
+  chargeControllerSetup();
+  inverterSetup();  
   bmsSetup();
-  //blynkSetup(); // This should be last, in order to have all data available
+  blynkSetup(); // This should be last, in order to have all data available
   //ssrSetup();
 }
 
 // This one is executed on CPU 1
 void loop() {
   unsigned long now = millis();
-  //wifiLoop(now);
-  //blynkLoop(now);
+  wifiLoop(now);
+  blynkLoop(now);
   //ssrLoop(now);
 }
 

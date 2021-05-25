@@ -15,6 +15,7 @@
 #include "mqttmanagement.h"
 #include "chargeControllerManagement.h"
 #include "ssrManagement.h"
+#include "bmsManagement.h"
 
 char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
@@ -105,11 +106,9 @@ void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
     }
 }
 
-void blynkUpdateChargeController() {
+void blynkUpdateChargeController()
+{
     static int index = 0;
-
-    Blynk.virtualWrite(CHARGER_1_VPIN_SWITCH,chargerStatus(CHARGER_1)?1:0);
-    Blynk.virtualWrite(CHARGER_2_VPIN_SWITCH,chargerStatus(CHARGER_2)?1:0);
 
     if (gChargerValuesChanged[index])
     {
@@ -120,7 +119,7 @@ void blynkUpdateChargeController() {
 #endif
         gChargerValuesChanged[index] = false;
         for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
-        {            
+        {
             sendStatus(BLYNK_CHARGER_PIN(index, i), (ChargerValues_t)i, chargerValues[index][i]);
         }
         do
@@ -130,14 +129,81 @@ void blynkUpdateChargeController() {
     }
 }
 
-
 void blynkUpdateInverter()
 {
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_POWER,gInverterPower);
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_CURRENT,gInverterCurrent);
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_VOLTAGE,gInverterVoltage);
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_POWER_FACTOR,gInverterPowerFactor);
-     
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_TARGET,gInverterTarget);          
+}
+
+void blynkUpdateBattery()
+{
+
+if(!gBmsBasicInfo || !gBmsConnected) {
+    return;
+}
+
+
+Blynk.virtualWrite(BLYNK_VPIN_TOTALVOLTAGE,(float)gBmsBasicInfo->getTotalVoltage() / 100.0);
+Blynk.virtualWrite(BLYNK_VPIN_CURRENT, (float)gBmsBasicInfo->getcurrent() / 100.0);
+Blynk.virtualWrite(BLYNK_VPIN_CAPACITYREMAIN, (float)gBmsBasicInfo->getcapacityRemain() / 100);
+Blynk.virtualWrite(BLYNK_VPIN_NOMINALCAPACITY,(float)gBmsBasicInfo->getnominalCapacity() /100);
+Blynk.virtualWrite(BLYNK_VPIN_CYCLELIFE,gBmsBasicInfo->getcycleLife());
+Blynk.virtualWrite(BLYNK_VPIN_STATEOFCHARGE, gBmsBasicInfo->getstateOfCharge());
+Blynk.virtualWrite( BLYNK_VPIN_FETSTATUSCHARGE, gBmsBasicInfo->getfetControlStatus() & 0x01);
+Blynk.virtualWrite( BLYNK_VPIN_FETSTATUSDISCHARGE, (gBmsBasicInfo->getfetControlStatus() > 1) & 0x01);
+if(gBmsBasicInfo->getnumTempSensors() > 0) {
+    Blynk.virtualWrite( BLYNK_VPIN_TEMP_1, (float)gBmsBasicInfo->getTemp(0) / 10);
+}
+
+if(gBmsBasicInfo->getnumTempSensors() > 1) {
+    Blynk.virtualWrite( BLYNK_VPIN_TEMP_2, (float)gBmsBasicInfo->getTemp(1) / 10);
+}
+
+uint16_t status = gBmsBasicInfo->getprotectionStatus();
+#define B(NUM) ((status>>NUM) & 1)
+
+Blynk.virtualWrite(BLYNK_VPIN_OVCELL,B(0));
+Blynk.virtualWrite(BLYNK_VPIN_UVCELL,B(1));
+Blynk.virtualWrite(BLYNK_VPIN_OVBATTERY,B(2));
+Blynk.virtualWrite(BLYNK_VPIN_UVBATTERY,B(3));
+Blynk.virtualWrite(BLYNK_VPIN_OTCHARGE,B(4));
+Blynk.virtualWrite(BLYNK_VPIN_OTDISCHARGE,B(6));
+Blynk.virtualWrite(BLYNK_VPIN_OCCHARGE,B(8));
+Blynk.virtualWrite(BLYNK_VPIN_OCDISCHARGE,B(9));
+
+#undef B
+
+Blynk.virtualWrite(BLYNK_VPIN_BLE_CONNECTED,gBmsConnected);
+if(gBmsConnected) {
+    Blynk.setProperty(BLYNK_VPIN_BLE_CONNECTED,"color",BLYNK_GREEN);
+} else {
+    Blynk.setProperty(BLYNK_VPIN_BLE_CONNECTED,"color",BLYNK_RED);
+}
+
+static uint16_t oldBalancingStatus = 0;
+uint16_t balanceStatus = gBmsBasicInfo->getbalanceStatusLow();
+//BALANCE_STATUS(VAL,CELL) (((VAL)>>(CELL)) & 0x1)
+if(gBmsCellInfo) {
+    for(uint i = 0;i<gBmsCellInfo->getNumOfCells();++i) {
+        Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)gBmsCellInfo->getCellVolt(i)/1000.0);
+        if(BALANCE_STATUS(oldBalancingStatus,i) != BALANCE_STATUS(balanceStatus,i)) {
+            char txt[4];
+            if(BALANCE_STATUS(balanceStatus,i)) {
+                sprintf(txt,"%d »",i);
+            } else {
+                sprintf(txt,"%d",i);
+            }
+            Blynk.setProperty(BLYNK_VPIN_CELL_VOLTAGE(i),"label",txt);
+        }
+    }
+}
+oldBalancingStatus = balanceStatus;
+
+
+
 }
 
 void blynkSetup()
@@ -151,23 +217,31 @@ void blynkSetup()
         Blynk.config(blynkTokenValue, blynkServerValue, atoi(blynkPortValue));
     }
 
+
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval >> 1, blynkUpdateInverter) < 0)
+    {
+        Serial.println("Cannot create blynk blynkUpdateInverter update timer");
+    }
+
+    delay(300); 
     if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateGrid) < 0)
     {
         Serial.println("Cannot create blynk grid update timer");
     }
 
-    delay(1000); 
+    delay(300); 
     if (gChargerNumValidChargers > 0)
     {
         if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateChargeController) < 0)
         {
             Serial.println("Cannot create blynk charge controller 1 timer");
         }
-    }
-    delay(1000);
-    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateInverter) < 0)
+    }    
+
+    delay(300);
+    if (blynkUpdateTimer.setInterval(blynkUpdateInterval, blynkUpdateBattery) < 0)
     {
-        Serial.println("Cannot create blynk blynkUpdateInverter update timer");
+        Serial.println("Cannot create blynk blynkUpdateBattery update timer");
     }
     
     blynkUpdateTimer.disableAll();
@@ -251,15 +325,11 @@ BLYNK_WRITE(BLYNK_VPIN_CALIBRATE_ADC)
 }
 #endif
 
-BLYNK_WRITE(CHARGER_1_VPIN_SWITCH)
+BLYNK_WRITE(V58)
 {
-    ssrSwitch(CHARGER_1,param.asInt() == 1);
+    bmsEnable(param.asInt() == 1);
 }
 
-BLYNK_WRITE(CHARGER_2_VPIN_SWITCH)
-{
-    ssrSwitch(CHARGER_2,param.asInt() == 1);
-}
 
 #if DEBUG
 BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)

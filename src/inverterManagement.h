@@ -30,6 +30,9 @@ extern float gInverterVoltage;
 // The current power factor at the inverter output
 extern float gInverterPowerFactor;
 
+// The target wattage we want the inverter to generate
+extern float gInverterTarget;
+
 // The maximum time of ms that er allowe to pass between two power readings
 // before the inverter's is set to 0;
 extern long gInverterTimeout;
