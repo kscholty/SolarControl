@@ -40,6 +40,8 @@ extern bool gChargerValuesChanged[NUM_CHARGERS];
 extern unsigned int gChargerNumValidChargers;
 extern unsigned long gChargerUpdateIntervalMilis;
 
+extern bool chargerReadPvAndBattery(uint index);
 extern void chargeControllerSetup();
 extern bool chargerIsValid(CHARGERS charger);
 inline bool chargerIsValid(int i) { return chargerIsValid((CHARGERS)i);}
+

@@ -328,8 +328,8 @@ void calculate(bufStruct *i2s_read_buff)
 #endif
 
         // We know that the voltage is between 0 and 3333mV
-        // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1629
-        // We can assume 1629 == 0A. So
+        // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1631
+        // We can assume 1631 == 0A. So
         // (val-1631)/1631*10
         #define ZERO_V 1631
         #define MAX_A 6.66

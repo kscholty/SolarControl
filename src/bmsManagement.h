@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-extern char gBmsServerNameValue[STRING_LEN];
+extern char gBmsDummyValue[STRING_LEN];
 extern char gBmsUpdateIntervalValue[NUMBER_LEN];
 
 #pragma pack(push,1)
@@ -64,8 +64,8 @@ struct BmsCellInfo_t
 extern BmsBasicInfo_t *gBmsBasicInfo;
 extern BmsCellInfo_t *gBmsCellInfo;
 
-extern bool gBmsConnected;
 extern bool gBmsDisconnect;
+
 
 extern void bmsSetup();
 extern void bmsEnable(bool on);

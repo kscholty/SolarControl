@@ -64,6 +64,8 @@ extern TaskHandle_t gInverterTaskHandle;
 // Consumption value has been received.
 extern void gInverterGridPowerUpdated();
 
+extern void inverterSetRealTarget();
+
 // Force the inverter output to 0
 #define inverterLock() gInverterShutdown = true
 

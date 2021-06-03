@@ -1,8 +1,7 @@
 
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEClient.h>
 
+#include "common.h"
 #include "bmsManagement.h"
 
 
@@ -22,32 +21,17 @@
 
 #define MAXMESSAGESIZE 64
 
-static char serviceUUIDValue[STRING_LEN] = "0000ff00-0000-1000-8000-00805f9b34fb";
-static char readCharUUIDValue[STRING_LEN]= "0000ff01-0000-1000-8000-00805f9b34fb";
-static char writeCharUUIDValue[STRING_LEN]= "0000ff02-0000-1000-8000-00805f9b34fb";
-
-
-char gBmsServerNameValue[STRING_LEN] = "A4:C1:38:F1:DC:55";
 char gBmsUpdateIntervalValue[NUMBER_LEN] = "3000";
-
-
+char gBmsDummyValue[STRING_LEN];
 
 BmsBasicInfo_t *gBmsBasicInfo = 0;
 BmsCellInfo_t *gBmsCellInfo = 0;
 
-bool gBmsConnected = false;
-bool gBmsDisconnect = false;
+bool gBmsDisconnect = true;
 
-
-static BLEAddress *pServerAddress;
-
-static BLEClient *pClient = 0;
-static BLERemoteCharacteristic* pReadCharacteristic = 0;
-static BLERemoteCharacteristic* pWriteCharacteristic = 0;
 static unsigned long lastReconnectAttempt = 0;
 static uint8_t messagebuffer[MAXMESSAGESIZE];
-static uint8_t messagePointer = 0;
-static bool messageValid = false;
+
 static TaskHandle_t taskId;
 
 static unsigned long bmsUpdateIntervalMilis = 3000;
@@ -65,145 +49,60 @@ struct MessageHeader_t
 
 #pragma pack(pop)
 
-class BLECallbacks: public BLEClientCallbacks {
-public:
-	virtual ~BLECallbacks() {};
-	virtual void onConnect(BLEClient *pClient) {
-        gBmsConnected = true;
-    };
-	virtual void onDisconnect(BLEClient *pClient) {
-        gBmsConnected = false;
-        delete pClient;
-        pClient = 0;
-        pReadCharacteristic = 0;
-        pWriteCharacteristic = 0;        
-    };
-} bleClientCallbacks;
+// We use Serial 2 for communication.
+// It's connected to an RS485 bus. 
+// It is shared with the Charge controllers therefore we have to 
+// get a mutex that protects the serial line from parallel access.
 
-void bleNotifyCallback(BLERemoteCharacteristic *pBLERemoteCharacteristic, uint8_t *pData, size_t length, bool isNotify)
+
+size_t readAnswerMessage()
 {
-    if (!length)
+    size_t toRead,read;
+
+    uint8_t messagePointer = 0;
+    MessageHeader_t *header =(MessageHeader_t*)messagebuffer;
+
+    toRead = sizeof(MessageHeader_t);
+    do
     {
-        return;
+        read = Serial2.readBytes(messagebuffer + messagePointer, toRead);
+        toRead -= read;
+        messagePointer += read;
+
+    } while (toRead && read);
+
+    if(read == 0 || header->start != STARTBYTE) {
+        // We didn't read anything or the answer has the wrong format
+        // That is assumed to be an error
+        return 0;
     }
 
-    messageValid = false;
-    if (pData[0] == STARTBYTE)
-    {
-        messagePointer = 0;
+    // Now we have the header.
+    // Let's check the length of the message.
+    // dataLen + checksum + stopbyte
+    toRead = header->dataLen+3; // 2bytes checksum+stopbyte
+    if(toRead+sizeof(MessageHeader_t) > MAXMESSAGESIZE) {
+        return 0;
     }
-
-    if (messagePointer + length > MAXMESSAGESIZE)
+    
+    messagePointer = 0;
+     do
     {
-#if DEBUG
-        Serial.println("Message size exceeds limit, discarding it.");
-#endif
-        messagePointer = 0;
-        return;
-    }
+        read = Serial2.readBytes(header->data + messagePointer, toRead);
+        toRead -= read;
+        messagePointer += read;
+    } while (toRead && read);
 
-    memcpy(messagebuffer + messagePointer, pData, length);
-    messagePointer += length;
-
-    if (pData[length - 1] == STOPBYTE)
-    {
-        messageValid = true;
-        xTaskNotify(taskId, messagePointer, eSetValueWithOverwrite);
-    }
+    return (messagePointer + sizeof(*header));
 }
 
-static bool bmsSetupBLE() {
-    String address(gBmsServerNameValue);
-
-    return false;
-    
-    address.trim();
-    if(address.length() == 0 || address.length() != 17) {
-        // Don't go on. This is useless...
-        return false;
-    }
-   BLEDevice::init(thingName);
-   pServerAddress = new BLEAddress(address.c_str());
+static bool bmsSetupBms() {
+   
    bmsUpdateIntervalMilis = atoi(gBmsUpdateIntervalValue);
    if(bmsUpdateIntervalMilis < 500) {
        bmsUpdateIntervalMilis = 3000;
    }
    return true;
-}
-
-bool bleConnectToServer()
-{
-#if DEBUG
-    Serial.print("Forming a BLE connection to ");
-    Serial.println(pServerAddress->toString().c_str());
-#endif
-
-    if(gBmsDisconnect) {
-        return false;
-    }
-
-    if(gBmsConnected) {
-        return true;
-    }
-
-    pClient = BLEDevice::createClient();
-    pClient->setClientCallbacks(&bleClientCallbacks);
-
-    // Connect to the remove BLE Server.
-    if (!pClient->connect(*pServerAddress))
-    {
-        Serial.println("Connection to BLE server failed");
-        delete pClient;
-        return false;
-    }
-
-    #if DEBUG
-    Serial.println(" - Connected to server");
-    #endif
-
-    // Obtain a reference to the service we are after in the remote BLE server.
-    BLERemoteService *pRemoteService = pClient->getService(serviceUUIDValue);
-
-#if DEBUG
-    Serial.println(pRemoteService->toString().c_str());
-#endif
-
-    if (pRemoteService == nullptr)
-    {
-#if DEBUG
-        Serial.print("Failed to find our service UUID: ");
-        Serial.println(serviceUUIDValue);
-#endif
-        pClient->disconnect();
-        return false;
-    }
-#if DEBUG
-    Serial.println(" - Found our service");
-#endif
-
-    // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pReadCharacteristic = pRemoteService->getCharacteristic(readCharUUIDValue);
-    if (pReadCharacteristic == nullptr)
-    {
-        Serial.print("Failed to find read characteristic UUID: ");
-        Serial.println(readCharUUIDValue);
-
-        pClient->disconnect();  
-        return false;
-    }
-
-    // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pWriteCharacteristic = pRemoteService->getCharacteristic(writeCharUUIDValue);
-    if (pWriteCharacteristic == nullptr)
-    {
-        Serial.print("Failed to find read characteristic UUID: ");
-        Serial.println(writeCharUUIDValue);
-
-        pClient->disconnect();    
-        return false;
-    }
-    pReadCharacteristic->registerForNotify(bleNotifyCallback);
-    return true;
 }
 
 
@@ -237,7 +136,7 @@ static bool parseCellInfo(BmsCellInfo_t *data, uint8_t datasize)
     return true;
 }
 
-static bool processMessage(uint8_t *message, uint32_t length) {
+static bool processMessage(uint8_t *message, size_t length) {
 
     bool result = false;
     MessageHeader_t *header = (MessageHeader_t*)message;
@@ -251,9 +150,9 @@ static bool processMessage(uint8_t *message, uint32_t length) {
     }
 
     switch(header->command) {
-        case 0x03: result = parseBasicInfo((BmsBasicInfo_t*)header->data,header->dataLen);//It's basic info
+        case 0x03: result = parseBasicInfo((BmsBasicInfo_t*)header->data,header->dataLen);//Its basic info
         break;
-        case 0x04: result = parseCellInfo((BmsCellInfo_t*)&header->dataLen,header->dataLen+sizeof(header->dataLen)); // It's Cell info
+        case 0x04: result = parseCellInfo((BmsCellInfo_t*)&header->dataLen,header->dataLen+sizeof(header->dataLen)); // Its Cell info
         break;
         default:
             Serial.print("BMS: Got unknown answer message with type ");
@@ -267,13 +166,17 @@ static bool processMessage(uint8_t *message, uint32_t length) {
 static bool handleRequest(uint8_t *request, size_t length)
 {
     bool result = false;
-    uint32_t messageSize = 0;
-    if (pWriteCharacteristic)
+    size_t messageSize = 0;
+    if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(bmsUpdateIntervalMilis - 100)) == pdTRUE)
     {
-        pWriteCharacteristic->writeValue(request, length, false);
-        if (xTaskNotifyWait(0, 0, &messageSize, pdMS_TO_TICKS(bmsUpdateIntervalMilis / 3)) != pdFAIL)
+        while (Serial2.read() != -1);
+        Serial2.write(request, length);
+        Serial2.flush();
+        messageSize = readAnswerMessage();
+        xSemaphoreGive(gSerial2Mutex);
+        if (messageSize)
         {            
-            // We got a notification
+            // We got an answer
             result = processMessage(messagebuffer, messageSize);
         } else {
             Serial.println("COuld not get result message");
@@ -324,8 +227,8 @@ static bool readBasicData()
     static uint8_t request[7] = {0xdd, 0xa5, 0x03, 0x00, 0xff, 0xfd, 0x77};
 
     // This is only for debug purposes
-    static uint8_t result[] = {0xDD, 0x03, 0x00, 0x1B, 0x17, 0x00, 0x00, 0x00, 0x02, 0xD0, 0x03, 0xE8, 0x00, 0x00, 0x20, 0x78, 0x00, 0x00,
-                               0x00, 0x00, 0x00, 0x00, 0x10, 0x48, 0x03, 0x0F, 0x02, 0x0B, 0x76, 0x0B, 0x82, 0xFB, 0xFF, 0x77};
+    static uint8_t result[] = {0xDD, 0x03, 0x00, 0x1B, 0x17, 0x00, 0x00, 0x00, 0x02, 0xD0, 0x03, 0xE8, 0x00, 0x00, 0x20, 0x78, 0x01, 0x02,
+                               0x00, 0x00, 0x02, 0x04, 0x10, 0x48, 0x03, 0x0F, 0x02, 0x0B, 0x76, 0x0B, 0x82, 0xFB, 0xFF, 0x77};
     memcpy(messagebuffer, result, sizeof(result));
     processMessage(result, sizeof(result));
 
@@ -359,8 +262,7 @@ static bool readCellValues()
 }
 
 void bmsEnable(bool on) {
-    gBmsDisconnect = on;
-    lastReconnectAttempt = 0;    
+    gBmsDisconnect = !on;
 }
 
 void bmsLoop(void *)
@@ -370,48 +272,20 @@ void bmsLoop(void *)
     {
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(bmsUpdateIntervalMilis));
 
-        if (!gBmsConnected)
+        if (!gBmsDisconnect)
         {
-            if (!gBmsDisconnect)
-            {
-                unsigned long now = millis();
-                if (now - lastReconnectAttempt > 5000)
-                {
-                    lastReconnectAttempt = now;
-                    // Attempt to reconnect
-                    if (bleConnectToServer())
-                    {
-                        lastReconnectAttempt = 0;
-                    }
-                }
-            }
-        }
-        else
-        {
-            if (!gBmsDisconnect)
-            {
-                // Query the BMS
-                if (pWriteCharacteristic)
-                {
-                    readBasicData();
-                    readCellValues();
-                }
-            }
-            else
-            {  // Disconnect from BMS
-                if (pClient)
-                {
-                    pClient->disconnect();
-                }
-            }
+            // Query the BMS
+            readBasicData();
+            readCellValues();
         }
     }
 }
 
+
 void bmsSetup()
 {
-    if(bmsSetupBLE()) {
-        BaseType_t result = xTaskCreate(bmsLoop, "bms", 3072, 0, 1, &taskId);
+    if(bmsSetupBms()) {
+        BaseType_t result = xTaskCreate(bmsLoop, "bms", 2048, 0, 1, &taskId);
 
         if (result != pdPASS)
         {

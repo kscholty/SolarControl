@@ -1,6 +1,7 @@
 
 
 #include <Arduino.h>
+#include "excessControlManagement.h"
 #include "inverterManagement.h"
 #include "adc.h"
 
@@ -42,6 +43,7 @@ float gInverterTarget = 0.0f;
 
 bool gInverterExcessToGrid = false;
 
+static float realTarget = 0.0f;
 static float inverterOffset = 0;
 static uint inverterLeg = 2;
 
@@ -107,17 +109,29 @@ static void inverterSetupInverter()
     }
 }
 
-void gInverterGridPowerUpdated() {
+void inverterSetRealTarget()
+{
+    realTarget = (float)gExcessTarget;
+}
+
+void gInverterGridPowerUpdated()
+{
     // New grid power use detected.
     // Now our target is this value plus the current inverter production.
     // Minus an offest to avoid overproduction.
 
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
-    gInverterTarget = gGridSumValues[ValuePower]+gInverterCurrent-inverterOffset;
-    lastGridUpdateReceived = millis();   
+    lastGridUpdateReceived = millis();
+    gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
+    if (gExcessTaskId)
+    {
+        // Let's re-calculate the excess values...
+        xTaskNotifyGive(gExcessTaskId);
+    } else {
+        realTarget = gInverterTarget;
+    }
 }
-
 
 bool ReadInverter() {
     gInverterCurrent =  adcGetCurrent();    
@@ -152,7 +166,7 @@ static void inverterLoop()
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
                 ReadInverter();
-                if (gInverterPower < gInverterTarget)
+                if (gInverterPower < realTarget)
                 {
                     pinValue = HIGH;
                 }

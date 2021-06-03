@@ -87,7 +87,7 @@ IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Longitude", "l
 IotWebConfTextParameter inveterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
 
 IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("Values for handling the BMS");
-IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Hardware Address of BLE dongle", "bmsad", gBmsServerNameValue, STRING_LEN,gBmsServerNameValue,gBmsServerNameValue);
+IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Unused", "bmsad", gBmsDummyValue, STRING_LEN,gBmsDummyValue);
 IotWebConfNumberParameter bmsUdpateInterval = IotWebConfNumberParameter("BMS upd. interval [ms]", "bmsupd", gBmsUpdateIntervalValue, sizeof(gBmsUpdateIntervalValue), gBmsUpdateIntervalValue);
 
 
@@ -314,12 +314,5 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
     result = false;
   }
   
-  l = server.arg(bmsBLEAddressParam.getId()).length();
-  if ( l != 0 && l != 17)
-  {
-    bmsBLEAddressParam.errorMessage = "BMS BLE donbgle address invalid";
-    result = false;
-  }
-
   return result;
   }
