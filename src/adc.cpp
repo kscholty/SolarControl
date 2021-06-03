@@ -4,7 +4,8 @@
 #include <soc/sens_reg.h>
 #include <soc/sens_struct.h>
 #include <driver/i2s.h>
-
+#include <soc/syscon_reg.h>
+#include <esp_event_loop.h>
 #include <esp_adc_cal.h>
 
 #include "common.h"
@@ -13,19 +14,21 @@
 //i2s number
 #define I2S_NUM           (I2S_NUM_0)
 //i2s sample rate
-#define I2S_SAMPLE_RATE   (20000)
+#define I2S_SAMPLE_RATE   (32000)
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
 //I2S read buffer length
-#define READ_LEN      (sizeof(int16_t) * I2S_SAMPLE_RATE / 50)
+#define READ_LEN      (sizeof(int16_t) * I2S_SAMPLE_RATE / 100)
+
 //I2S data format
-#define I2S_FORMAT        (I2S_CHANNEL_FMT_ONLY_LEFT)
+#define I2S_FORMAT        (I2S_CHANNEL_FMT_ONLY_RIGHT)
 //I2S channel number
 #define I2S_CHANNEL_NUM   ((I2S_FORMAT < I2S_CHANNEL_FMT_ONLY_RIGHT) ? (2) : (1))
 //I2S built-in ADC unit
 #define I2S_ADC_UNIT       ADC_UNIT_1
 //I2S built-in ADC channel
-#define I2S_ADC_CHANNEL     ADC1_CHANNEL_0
+#define I2S_ADC_CURRENT_CHANNEL     ADC1_CHANNEL_4
+#define I2S_ADC_VOLTAGE_CHANNEL     ADC1_CHANNEL_5
 
 // how many buffers do we want to use for DMA
 #define ADC_BUFFER_COUNT   2
@@ -36,14 +39,17 @@
 
 
 
+typedef uint16_t buffer_t[READ_LEN / sizeof(int16_t)];
 struct bufStruct {
     bufStruct() { count = 0;}
     size_t count;
-    char buffer[READ_LEN];
+    buffer_t buffer;
 };
 
 IRAM_ATTR void readAdc(void *);
 void calculate(bufStruct *);
+void printBuffer(bufStruct *);
+void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]);
 
 // The sum of suared values. Basis for 
 // calculation of root...
@@ -51,7 +57,7 @@ ICACHE_RAM_ATTR static double  avgSquareSum = 0;
 
 static TaskHandle_t readTask = NULL;
 static xQueueHandle mutex;
-//static xQueueHandle i2s_event_queue;
+static xQueueHandle i2s_event_queue;
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT];
 int oldValsPos = 0;
 
@@ -220,72 +226,118 @@ bool adcInit()
         I2S_SAMPLE_BITS,
         I2S_FORMAT,
         I2S_COMM_FORMAT_I2S,
-        0,
+        ESP_INTR_FLAG_LEVEL1,
         ADC_BUFFER_COUNT,
         READ_LEN,
-        1,
-        false,
+        2,
+        true,
         false
      };
 
+    
     adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(I2S_ADC_CURRENT_CHANNEL, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_11);
 
-     //i2s_event_queue = xQueueCreate(ADC_BUFFER_COUNT, sizeof(i2s_event_type_t));
-
+     
      //install and start i2s driver
-     i2s_driver_install(I2S_NUM, &i2s_config, ADC_BUFFER_COUNT, NULL);
+     i2s_driver_install(I2S_NUM, &i2s_config, ADC_BUFFER_COUNT, &i2s_event_queue);
      
      //init ADC pad
-     i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL);
+     //i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CURRENT_CHANNEL);#
+
+     // This is the trick that makes it work. 
+     // You have to call it with a 0 here. Not calling it won't work, but calling it with a correct
+     // adc_unit will cause the unit to use only the set channel
+     i2s_set_adc_mode((adc_unit_t)0, I2S_ADC_CURRENT_CHANNEL);
     
+    // Length of the pattern table  (-1 obviously)
+    SET_PERI_REG_BITS(SYSCON_SARADC_CTRL_REG, SYSCON_SARADC_SAR1_PATT_LEN, 1, SYSCON_SARADC_SAR1_PATT_LEN_S);
+    // Channels 0 and 5 with 12db Attenuation and length of 12 bit
+    WRITE_PERI_REG(SYSCON_SARADC_SAR1_PATT_TAB1_REG,0x0F4F0000);
+
+ // The raw ADC data is written in DMA in inverted form. This add an inversion:
+    SET_PERI_REG_MASK(SYSCON_SARADC_CTRL2_REG, SYSCON_SARADC_SAR1_INV);
+
     mutex = xSemaphoreCreateMutex();
 
-    // Create empty buffers
     
-        bufStruct *i2s_read_buff = (bufStruct*)calloc(1,sizeof(bufStruct));
-
-        if(!i2s_read_buff) {
-            Serial.println("Creation of buffer failed");
-            return false;
-        }
- 
     
-    characterize();
     //adcReadCalibrationData();
 
     memset(oldVals,0,ADC_AVERAGE_COUNT*sizeof(*oldVals));
-     xTaskCreate(readAdc, "ADC read", 2048, i2s_read_buff, 5, &readTask);
+     xTaskCreate(readAdc, "ADC read", 4096, 0, 5, &readTask);
      return true;
 }
 
 void readAdc(void *buffer)
 {
+
+    bufStruct *i2s_read_buff = (bufStruct *)calloc(1, sizeof(bufStruct));
+    bufStruct *results = (bufStruct *)calloc(2, sizeof(bufStruct));
+
+    characterize();
+
+    // ADC-I2S Scanning does not normal start (more badly) after the reset of ESP32.
+    // It is necessary to add a delay of at least 5 seconds before switching on the ADC for a reliable start, this is issue.
+    vTaskDelay(5000 / portTICK_RATE_MS);
+
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
-    bufStruct *i2s_read_buff = (bufStruct *)buffer;
-    Serial.println("ADC thread entering loop...");
+
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
+        system_event_t evt;
+        if (xQueueReceive(i2s_event_queue, &evt, portMAX_DELAY) == pdPASS)
         {
-            //read data from I2S bus, in this case, from ADC.
-            i2s_read(I2S_NUM, i2s_read_buff->buffer, READ_LEN, &i2s_read_buff->count, portMAX_DELAY);
-            calculate(i2s_read_buff);
-        }
-       // else
-        {
-       //     Serial.println("Could not get buffer");
+            if (evt.event_id == (system_event_id_t)I2S_EVENT_RX_DONE)
+            {
+                {
+                    //read data from I2S bus, in this case, from ADC.
+                    i2s_read(I2S_NUM, i2s_read_buff->buffer, READ_LEN, &i2s_read_buff->count, 0);
+                    i2s_read_buff->count /= sizeof(uint16_t);
+                    splitBuffer(i2s_read_buff, results);
+                    //printBuffer(i2s_read_buff);
+                    //calculate(i2s_read_buff);
+                }
+            }
+            else
+            {
+                Serial.println("Could not get buffer");
+            }
         }
     }
-    
+
     Serial.println(" Adc task exiting... ");
     // Clean up and exit
     i2s_adc_disable(I2S_NUM);
     i2s_stop(I2S_NUM);
-    i2s_driver_uninstall(I2S_NUM);    
+    i2s_driver_uninstall(I2S_NUM);
     readTask = 0;
     vTaskDelete(xTaskGetCurrentTaskHandle());
+}
+
+void printBuffer(bufStruct *i2s_read_buff) {
+    size_t count = i2s_read_buff->count ;
+   
+    Serial.printf("Read: %d values\n",count);
+    for(int i=0;i<10;++i) {
+        Serial.printf("%d: %x\n",i2s_read_buff->buffer[i]>>12,i2s_read_buff->buffer[i] & 0xFFF);       
+    }
+    Serial.println("------------------");
+}
+
+void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]) {
+    outputChannels[0].count = 0;
+    outputChannels[1].count = 0;
+    for(size_t i=0;i<input->count;++i) {
+        uint16_t value = input->buffer[i];
+        int index = value>>14; // 12 bytes are the value, then shift 2 more to see if its 4 or 0
+        outputChannels[index].buffer[outputChannels[index].count++] = value & 0xFFF;
+    }
+
+    Serial.printf("Counts: 0:%d, 4:%d\n",outputChannels[0].count, outputChannels[1].count);
 }
 
 void calculate(bufStruct *i2s_read_buff)
