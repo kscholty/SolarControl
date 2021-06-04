@@ -19,7 +19,7 @@ unsigned long gChargerUpdateIntervalMilis = 15000;
 SemaphoreHandle_t gSerial2Mutex = 0;
 StaticSemaphore_t xSemaphoreBuffer;
 
-unsigned int chargerValues[NUM_CHARGERS][NUM_CHARGER_VALUES];
+unsigned int chargerValues[NUM_CHARGERS][CHARGER_ARRAY_SIZE];
 
 bool chargerIsValid(CHARGERS charger) {
         return chargerValid(charger);
@@ -53,59 +53,66 @@ static void chargeControllerSetupController()
 }
 
 bool chargerReadPvAndBattery(uint index)
-{         
+{
         bool returnVal = false;
-        if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(gChargerUpdateIntervalMilis / 3*NUM_CHARGERS)) == pdTRUE )
+        if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(gChargerUpdateIntervalMilis / 3 * NUM_CHARGERS)) == pdTRUE)
         {
-             uint8_t result = charger[index].readInputRegisters(0x3100, 8);
-                xSemaphoreGive(gSerial2Mutex);
-                if (result == charger[index].ku8MBSuccess)
+                uint8_t result;
+                uint count = 0;
+                do
                 {
+                        result = charger[index].readInputRegisters(0x3100, 8);
+                        xSemaphoreGive(gSerial2Mutex);
+                        if (result == charger[index].ku8MBSuccess)
+                        {
 
-                        chargerValues[index][PV_VOLTAGE] = charger[index].getResponseBuffer(0x00);
+                                chargerValues[index][PV_VOLTAGE] = charger[index].getResponseBuffer(0x00);
 #if DEBUG
-                        Serial.print("PV Voltage: ");
-                        Serial.println(chargerValues[index][PV_VOLTAGE]);
+                                Serial.print("PV Voltage: ");
+                                Serial.println(chargerValues[index][PV_VOLTAGE]);
 #endif
-                        chargerValues[index][PV_CURRENT] = charger[index].getResponseBuffer(0x01);
+                                chargerValues[index][PV_CURRENT] = charger[index].getResponseBuffer(0x01);
 #if DEBUG
-                        Serial.print("PV Current: ");
-                        Serial.println(chargerValues[index][PV_CURRENT]);
+                                Serial.print("PV Current: ");
+                                Serial.println(chargerValues[index][PV_CURRENT]);
 #endif
-                        chargerValues[index][PV_POWER] = MK_32(charger[index].getResponseBuffer(0x02), charger[index].getResponseBuffer(0x03));
+                                chargerValues[index][PV_POWER] = MK_32(charger[index].getResponseBuffer(0x02), charger[index].getResponseBuffer(0x03));
 #if DEBUG
-                        Serial.print("PV Power: ");
-                        Serial.println(chargerValues[index][PV_POWER]);
+                                Serial.print("PV Power: ");
+                                Serial.println(chargerValues[index][PV_POWER]);
 #endif
-                        chargerValues[index][BATTERY_VOLTAGE] = charger[index].getResponseBuffer(0x04);
+                                chargerValues[index][BATTERY_VOLTAGE] = charger[index].getResponseBuffer(0x04);
 #if DEBUG
-                        Serial.print("Battery Voltage: ");
-                        Serial.println(chargerValues[index][BATTERY_VOLTAGE]);
+                                Serial.print("Battery Voltage: ");
+                                Serial.println(chargerValues[index][BATTERY_VOLTAGE]);
 #endif
-                        chargerValues[index][BATTERY_CHARGE_CURRENT] = charger[index].getResponseBuffer(0x05);
+                                chargerValues[index][BATTERY_CHARGE_CURRENT] = charger[index].getResponseBuffer(0x05);
 #if DEBUG
-                        Serial.print("Battery Charge Current: ");
-                        Serial.println(chargerValues[index][BATTERY_CHARGE_CURRENT]);
+                                Serial.print("Battery Charge Current: ");
+                                Serial.println(chargerValues[index][BATTERY_CHARGE_CURRENT]);
 #endif
-                        chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(charger[index].getResponseBuffer(0x06), charger[index].getResponseBuffer(0x07));
+                                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(charger[index].getResponseBuffer(0x06), charger[index].getResponseBuffer(0x07));
 #if DEBUG
-                        Serial.print("PV Power: ");
-                        Serial.println(chargerValues[index][PV_POWER]);
+                                Serial.print("PV Power: ");
+                                Serial.println(chargerValues[index][PV_POWER]);
 #endif
-                        if (chargerValues[index][BATTERY_CHARGE_CURRENT] > 0)
-                        {
-                                chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] * 100 / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                                if (chargerValues[index][BATTERY_CHARGE_CURRENT] > 0)
+                                {
+                                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] * 100 / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                                }
+                                else
+                                {
+                                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0;
+                                }
+#if DEBUG
+                                Serial.print("Battery Charge Voltage: ");
+                                Serial.println(chargerValues[index][PV_POWER]);
+#endif
+                                returnVal = true;
+                        } else {
+                                vTaskDelay(pdMS_TO_TICKS(200));
                         }
-                        else
-                        {
-                                chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0;
-                        }
-#if DEBUG
-                        Serial.print("Battery Charge Voltage: ");
-                        Serial.println(chargerValues[index][PV_POWER]);
-#endif
-                        returnVal = true;
-                }
+                } while (!returnVal  && ++count < 3);
         }
         return returnVal;
 }
@@ -136,7 +143,7 @@ static bool readTemps(uint index)
 #endif
                         returnVal = true;
                 }
-
+                vTaskDelay(pdMS_TO_TICKS(200));
                 result = charger[index].readInputRegisters(0x311B, 1);
                 xSemaphoreGive(gSerial2Mutex);
                 if (result == charger[index].ku8MBSuccess)
@@ -173,20 +180,37 @@ static bool readStates(uint index)
 void updateController(uint index)
 {       
         bool result = false;
+        bool newResult = false;
+        unsigned int cnt;
 #if DEBUG
         Serial.print("Updating controller ");
         Serial.println(index + 1);
 #endif
         
+        vTaskDelay(pdMS_TO_TICKS(200));
         result = chargerReadPvAndBattery(index);
-        if(gExcessTaskId) {
-                // Let's re-calculate the excess values...
-                xTaskNotifyGive(gExcessTaskId);
-        }
-        result = readTemps(index) || result;
-        result = readStates(index) || result;        
-        gChargerValuesChanged[index] = result;
+        unsigned int value = chargerValues[index][CHARGER_READ_ERROR];
+        cnt = value >> 2*8;
+        cnt = result ? 0 : cnt+1;
+        chargerValues[index][CHARGER_READ_ERROR] = (value & 0x00FFFF) | (cnt <<2*8);
+        
+        vTaskDelay(pdMS_TO_TICKS(200));
+        newResult = readTemps(index) ;
+        value = chargerValues[index][CHARGER_READ_ERROR];  
+        cnt = (value >> 1*8 ) & 0xFF;
+        cnt = newResult ? 0 : cnt+1;      
+        chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFF00FF) | (cnt <<1*8);
+        result = newResult || result;
 
+        vTaskDelay(pdMS_TO_TICKS(200));
+        newResult = readStates(index) || result;                
+        value = chargerValues[index][CHARGER_READ_ERROR];
+        cnt = value & 0xFF;
+        cnt = newResult ? 0 : cnt+1;              
+        chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFFFF00) | cnt;
+
+        result = newResult || result;
+        gChargerValuesChanged[index] = result;
 }
 
 void chargeControllerThradFunc(void *)
@@ -209,10 +233,14 @@ void chargeControllerThradFunc(void *)
                 for (int i = 0; i < NUM_CHARGERS; ++i)
                 {
                         if (chargerValid(i))
-                        {
-                                vTaskDelay(pdMS_TO_TICKS(100));
+                        {                                
                                 updateController(i);
                         }
+                }
+                if (gExcessTaskId)
+                {
+                        // Let's re-calculate the excess values...
+                        xTaskNotifyGive(gExcessTaskId);
                 }
         }
 }
@@ -224,9 +252,9 @@ void chargeControllerSetup()
         gSerial2Mutex = xSemaphoreCreateMutexStatic( &xSemaphoreBuffer );
         gChargerNumValidChargers = calculateChargerIds();
         gChargerUpdateIntervalMilis = atol(gChargerUpdateIntervalValue) * 1000;
-        if (gChargerUpdateIntervalMilis < 10000)
+        if (gChargerUpdateIntervalMilis < 5000)
         {
-                gChargerUpdateIntervalMilis = 10000;
+                gChargerUpdateIntervalMilis = 5000;
         }
         #if DEBUG
         Serial.print("Num controllers : ");

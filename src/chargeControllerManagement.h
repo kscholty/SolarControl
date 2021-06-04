@@ -25,7 +25,9 @@ enum ChargerValues_t
     BATTERY_CHARGE_CURRENT,
     BATTERY_CHARGE_VOLTAGE,
     BATTERY_CHARGE_POWER,
-    NUM_CHARGER_VALUES
+    NUM_CHARGER_VALUES,
+    CHARGER_READ_ERROR,
+    CHARGER_ARRAY_SIZE
 };
 
 enum ChargerFlags_t
@@ -35,7 +37,7 @@ enum ChargerFlags_t
 
 extern char gChargerModbusAdressesValue[NUM_CHARGERS][4];
 extern char gChargerUpdateIntervalValue[6];
-extern unsigned int chargerValues[NUM_CHARGERS][NUM_CHARGER_VALUES];
+extern unsigned int chargerValues[NUM_CHARGERS][CHARGER_ARRAY_SIZE];
 extern bool gChargerValuesChanged[NUM_CHARGERS];
 extern unsigned int gChargerNumValidChargers;
 extern unsigned long gChargerUpdateIntervalMilis;

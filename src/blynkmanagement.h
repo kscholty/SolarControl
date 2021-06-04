@@ -62,6 +62,8 @@
 // Charger ID can be either 0 or 1
 // VPIN is the index of the pin of the controller (0...n) to address.
 #define BLYNK_CHARGER_PIN(charger_id, VPIN) (((charger_id)*NUM_CHARGER_VALUES) + (VPIN) + FIRST_CHARGER_VPIN)
+#define BLYNK_CHARGER_1_ERROR V38
+#define BLYNK_CHARGER_2_ERROR V39
 
 extern char blynkTokenValue[BLYNK_STRLEN];
 extern char blynkServerValue[BLYNK_STRLEN];

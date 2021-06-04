@@ -22,7 +22,7 @@ char blynkTokenValue[BLYNK_STRLEN] = "";
 char blynkServerValue[BLYNK_STRLEN] = BLYNK_DEFAULT_DOMAIN;
 char blynkPortValue[NUMBER_LEN] = "80";
 static long lastReconnectAttempt = 0;
-static long blynkUpdateInterval = 10000;
+static long blynkUpdateInterval = 5000;
 static SimpleTimer blynkUpdateTimer;
 
 
@@ -109,26 +109,29 @@ void sendStatus(unsigned int pin, ChargerValues_t type, unsigned int value)
 
 void blynkUpdateChargeController()
 {
-    static int index = 0;
-
-    if (gChargerValuesChanged[index])
+    char text[30]; 
+    for (int index = 0; index < NUM_CHARGERS; ++index)
     {
+
+        if (gChargerValuesChanged[index])
+        {
 #if DEBUG
-        Serial.print("Updating charge controller ");
-        Serial.print(index + 1);
-        Serial.println(" data on Blynk");
+            Serial.print("Updating charge controller ");
+            Serial.print(index + 1);
+            Serial.println(" data on Blynk");
 #endif
-        gChargerValuesChanged[index] = false;
-        for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
-        {
-            sendStatus(BLYNK_CHARGER_PIN(index, i), (ChargerValues_t)i, chargerValues[index][i]);
+            gChargerValuesChanged[index] = false;
+            for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
+            {
+                sendStatus(BLYNK_CHARGER_PIN(index, i), (ChargerValues_t)i, chargerValues[index][i]);
+            }
         }
-        do
-        {
-            index = (index + 1) % NUM_CHARGERS;
-        } while (!chargerIsValid(index));
+        unsigned int value = chargerValues[index][CHARGER_READ_ERROR];
+        sprintf(text,"PV:%d T:%d S:%d",value >> 2*8,(value>>1*8)& 0xFF,value & 0xFF);        
+        Blynk.virtualWrite(BLYNK_CHARGER_1_ERROR+index,text);
     }
-    Blynk.virtualWrite(V37,gCurrentPowerCreated);  
+
+    Blynk.virtualWrite(V37, gCurrentPowerCreated);
 }
 
 void blynkUpdateInverter()

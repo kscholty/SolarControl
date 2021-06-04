@@ -14,8 +14,8 @@
 
 // We check every 10 seconds
 #define HOLDTIME 10000
-#define EXCESSSTEP 10
-#define EPSILON 3
+#define EXCESSSTEP 30
+#define EPSILON ((EXCESSSTEP) / 2)
 
 int gExcessTarget = 0.0;
 TaskHandle_t gExcessTaskId = 0;
@@ -41,7 +41,7 @@ void excessManagementLoop(void *)
 
     int lastPowerCreated = calculateInstantPower();
     int diffPower;
-
+    bool reset = false;
     int laststep = EXCESSSTEP;
     gExcessTarget = lastPowerCreated > gInverterTarget ? gInverterTarget + EXCESSSTEP : gInverterTarget;
 
@@ -56,33 +56,51 @@ void excessManagementLoop(void *)
             // Don't request anything. This will lead to the inverterTarget to be used.
             gExcessTarget = gInverterTarget;
             laststep = 0;
+            lastPowerCreated = gCurrentPowerCreated;
+            //reset = true;
         }
         else
         {
-            diffPower = lastPowerCreated - gCurrentPowerCreated;
-            if (abs(diffPower) < EPSILON)
+            if (reset)
             {
-                // Nothing major changed
-                // Undo the last step made
-                // And assume we reached the MPP
-                gExcessTarget -= laststep;
-                laststep = 0;
+                gExcessTarget = gInverterTarget + EXCESSSTEP;
+                laststep = EXCESSSTEP;
+                reset = false;
+                lastPowerCreated = gCurrentPowerCreated;
             }
             else
             {
-                if (laststep == 0)
+                diffPower = lastPowerCreated - gCurrentPowerCreated;
+                if (abs(diffPower) < EPSILON)
                 {
-                    laststep = EXCESSSTEP;
+                    // Nothing major changed
+                    if(gExcessTarget > gCurrentPowerCreated) {
+                        // This does not make sense. We are at a plateau,
+                        // but we request more than can be done....
+                        // so we go back below the production value
+                        gExcessTarget = 0.8 * gCurrentPowerCreated;
+                    } else {
+                        // Go left until production drops
+                        gExcessTarget -= EXCESSSTEP;
+                    }
+                    laststep = -EXCESSSTEP;                    
                 }
-                // Relevant change detected
-                if (diffPower > 0)                
+                else
                 {
-                    // Less production
-                    // Move into the opposite direction                    
-                    laststep *= -1;
+                    if (laststep == 0)
+                    {
+                        laststep = EXCESSSTEP;
+                    }
+                    // Relevant change detected
+                    if (diffPower > 0)
+                    {
+                        // Less production
+                        // Move into the opposite direction
+                        laststep *= -1;
+                    }
+                    gExcessTarget += laststep;
+                    lastPowerCreated = gCurrentPowerCreated;
                 }
-                gExcessTarget += laststep;
-                lastPowerCreated = gCurrentPowerCreated;                
             }
 
             if (gExcessTarget < gInverterTarget)
@@ -90,8 +108,9 @@ void excessManagementLoop(void *)
                 // Just to be on the safe side...
                 // Go back to the default limit.
                 gExcessTarget = gInverterTarget;
-                laststep = 0;
-            }            
+                laststep = EXCESSSTEP;
+                lastPowerCreated = gCurrentPowerCreated;
+            }
         }
         inverterSetRealTarget();
     }
