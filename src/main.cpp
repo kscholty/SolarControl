@@ -17,12 +17,12 @@ void setup() {
   
   inverterPreInit();
   wifiSetup();
-  mqttSetup();
-  chargeControllerSetup();
+  //mqttSetup();
+  //chargeControllerSetup();
   inverterSetup();  
-  bmsSetup();
-  setupExcessManagement(); // Has to be after the inverter
-  blynkSetup(); // This should be last, in order to have all data available
+  //bmsSetup();
+  //setupExcessManagement(); // Has to be after the inverter
+  //blynkSetup(); // This should be last, in order to have all data available
   //ssrSetup();
 }
 
@@ -30,7 +30,7 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   wifiLoop(now);
-  blynkLoop(now);
+  //blynkLoop(now);
   //ssrLoop(now);
 }
 
