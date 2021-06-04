@@ -271,8 +271,8 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
     result = false;
   }
 
-  if (server.arg(chargerUdpateInterval.getId()).toInt() < 10) {
-    chargerUdpateInterval.errorMessage = "Charger update interval must be > 10s";
+  if (server.arg(chargerUdpateInterval.getId()).toInt() < 5) {
+    chargerUdpateInterval.errorMessage = "Charger update interval must be > 5s";
     result = false;
   }
 

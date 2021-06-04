@@ -111,7 +111,7 @@ static void inverterSetupInverter()
 
 void inverterSetRealTarget()
 {
-    realTarget = (float)gExcessTarget;
+    realTarget = max((float)gExcessTarget,gInverterTarget);
 }
 
 void gInverterGridPowerUpdated()
@@ -124,13 +124,9 @@ void gInverterGridPowerUpdated()
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
     lastGridUpdateReceived = millis();
     gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
-    if (gExcessTaskId)
-    {
-        // Let's re-calculate the excess values...
-        xTaskNotifyGive(gExcessTaskId);
-    } else {
-        realTarget = gInverterTarget;
-    }
+   
+    inverterSetRealTarget();
+    
 }
 
 bool ReadInverter() {
