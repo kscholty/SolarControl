@@ -4,7 +4,7 @@
 #include "excessControlManagement.h"
 
 
-#define BAUDRATE 9600
+#define BAUDRATE 115200
 #define MK_32(LOW,HIGH) (( ((int32_t)(HIGH)) <<16)|(LOW))
 #define chargerValid(INDEX) (chargerModbusAdresses[(INDEX)] > 0) 
 
