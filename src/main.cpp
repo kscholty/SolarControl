@@ -16,7 +16,7 @@ void setup() {
   Serial.println();
   
   inverterPreInit();
-  wifiSetup();
+  //wifiSetup();
   //mqttSetup();
   //chargeControllerSetup();
   inverterSetup();  
@@ -29,7 +29,7 @@ void setup() {
 // This one is executed on CPU 1
 void loop() {
   unsigned long now = millis();
-  wifiLoop(now);
+  //wifiLoop(now);
   //blynkLoop(now);
   //ssrLoop(now);
 }
