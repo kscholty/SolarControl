@@ -8,6 +8,7 @@
 #include <esp_adc_cal.h>
 
 #include "common.h"
+#include "debugManagement.h"
 
 
 //i2s number
@@ -264,7 +265,7 @@ void readAdc(void *buffer)
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
     bufStruct *i2s_read_buff = (bufStruct *)buffer;
-    Serial.println("ADC thread entering loop...");
+    DEBUG_V("ADC thread entering loop...");
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
@@ -279,7 +280,7 @@ void readAdc(void *buffer)
         }
     }
     
-    Serial.println(" Adc task exiting... ");
+    DEBUG_I(" Adc task exiting... ");
     // Clean up and exit
     i2s_adc_disable(I2S_NUM);
     i2s_stop(I2S_NUM);
@@ -293,9 +294,9 @@ void calculate(bufStruct *i2s_read_buff)
 
     double sum = 0.0;
 
-#if DEBUG
+DBG_SECT(
     unsigned long start = millis();
-#endif 
+)
 
     size_t count = i2s_read_buff->count / sizeof(int16_t);
     uint16_t *buffer = (uint16_t *)i2s_read_buff->buffer;
@@ -306,14 +307,15 @@ void calculate(bufStruct *i2s_read_buff)
         size_t index = i << 2;
         buffer[i] = ((float)buffer[index] + (float)buffer[index + 1] + (float)buffer[index + 2] + (float)buffer[index + 3]) / 4.0f + 0.5f;
     }
-#if DEBUG
+
+DBG_SECT(
     static size_t counter = 0;
     if (++counter == 200)
         counter = 0;
     
     double avgRaw = 0;
     double avgAdj = 0;
-#endif
+)
     
     for (size_t i = 0; i < count; ++i, ++buffer)
     {
@@ -323,9 +325,9 @@ void calculate(bufStruct *i2s_read_buff)
         double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
         //double val = value;
         if(val<0) val = 0;
-#if DEBUG
+DBG_SECT(
         avgRaw += val;    
-#endif
+)
 
         // We know that the voltage is between 0 and 3333mV
         // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1631
@@ -334,17 +336,22 @@ void calculate(bufStruct *i2s_read_buff)
         #define ZERO_V 1631
         #define MAX_A 6.66
         val = val * (MAX_A / ZERO_V) - MAX_A;
-#if DEBUG
+DBG_SECT(
         avgAdj += val;
-#endif        
+)     
         sum += (val * val);
     }
-#if DEBUG
-    if(!counter) {
-        Serial.print("AvgRaw: "); Serial.print(avgRaw/count); Serial.print(" AvgAdj: "); Serial.println(avgAdj/count);
-        Serial.println("---------------");
-    }
-#endif
+    
+    DBG_SECT(
+        if (Debug.isActive(Debug.DEBUG))
+        {
+            if (!counter)
+            {
+                Debug.printf("AvgRaw: %lf, AvgAdj: %lf\n",avgRaw / count, avgAdj / count);                                
+                Debug.println("-------------------------");
+            }
+        }
+    )
     i2s_read_buff->count = 0;
 
     if (count)
@@ -358,13 +365,12 @@ void calculate(bufStruct *i2s_read_buff)
         oldVals[oldValsPos] = sum;
         oldValsPos = (oldValsPos+1) % ADC_AVERAGE_COUNT;
     }
-    #if DEBUG
-    if(!counter) {
-        unsigned long duration = millis()-start;
-        Serial.print("calc took "); Serial.println(duration);
+
+DBG_SECT(
+    if(!counter) {        
+        DEBUG_D("calc took %ld", millis()-start);
     }
-    
-    #endif
+)
 }
 
 double adcGetCurrent()

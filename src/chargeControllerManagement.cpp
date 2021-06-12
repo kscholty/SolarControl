@@ -1,5 +1,6 @@
 
 #include <ModbusMaster.h>
+#include "debugManagement.h"
 #include "chargeControllerManagement.h"
 #include "excessControlManagement.h"
 
@@ -67,35 +68,35 @@ bool chargerReadPvAndBattery(uint index)
                         {
 
                                 chargerValues[index][PV_VOLTAGE] = charger[index].getResponseBuffer(0x00);
-#if DEBUG
-                                Serial.print("PV Voltage: ");
-                                Serial.println(chargerValues[index][PV_VOLTAGE]);
-#endif
+DBG_SECT(
+                                rprintD("PV Voltage: ");
+                                rprintDln(chargerValues[index][PV_VOLTAGE]);
+)
                                 chargerValues[index][PV_CURRENT] = charger[index].getResponseBuffer(0x01);
-#if DEBUG
-                                Serial.print("PV Current: ");
-                                Serial.println(chargerValues[index][PV_CURRENT]);
-#endif
+DBG_SECT(
+                                rprintD("PV Current: ");
+                                rprintDln(chargerValues[index][PV_CURRENT]);
+)
                                 chargerValues[index][PV_POWER] = MK_32(charger[index].getResponseBuffer(0x02), charger[index].getResponseBuffer(0x03));
-#if DEBUG
-                                Serial.print("PV Power: ");
-                                Serial.println(chargerValues[index][PV_POWER]);
-#endif
+DBG_SECT(
+                                rprintD("PV Power: ");
+                                rprintDln(chargerValues[index][PV_POWER]);
+)
                                 chargerValues[index][BATTERY_VOLTAGE] = charger[index].getResponseBuffer(0x04);
-#if DEBUG
-                                Serial.print("Battery Voltage: ");
-                                Serial.println(chargerValues[index][BATTERY_VOLTAGE]);
-#endif
+DBG_SECT(
+                                rprintD("Battery Voltage: ");
+                                rprintDln(chargerValues[index][BATTERY_VOLTAGE]);
+)
                                 chargerValues[index][BATTERY_CHARGE_CURRENT] = charger[index].getResponseBuffer(0x05);
-#if DEBUG
-                                Serial.print("Battery Charge Current: ");
-                                Serial.println(chargerValues[index][BATTERY_CHARGE_CURRENT]);
-#endif
+DBG_SECT(
+                                rprintD("Battery Charge Current: ");
+                                rprintDln(chargerValues[index][BATTERY_CHARGE_CURRENT]);
+)
                                 chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(charger[index].getResponseBuffer(0x06), charger[index].getResponseBuffer(0x07));
-#if DEBUG
-                                Serial.print("PV Power: ");
-                                Serial.println(chargerValues[index][PV_POWER]);
-#endif
+DBG_SECT(
+                                rprintD("PV Power: ");
+                                rprintDln(chargerValues[index][PV_POWER]);
+)
                                 if (chargerValues[index][BATTERY_CHARGE_CURRENT] > 0)
                                 {
                                         chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] * 100 / chargerValues[index][BATTERY_CHARGE_CURRENT];
@@ -104,12 +105,13 @@ bool chargerReadPvAndBattery(uint index)
                                 {
                                         chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0;
                                 }
-#if DEBUG
-                                Serial.print("Battery Charge Voltage: ");
-                                Serial.println(chargerValues[index][PV_POWER]);
-#endif
+DBG_SECT(
+                                rprintD("Battery Charge Voltage: ");
+                                rprintDln(chargerValues[index][PV_POWER]);
+)
                                 returnVal = true;
                         } else {
+                                DEBUG_E("Reading charger PV/Bat failed with %x\n", result);
                                 vTaskDelay(pdMS_TO_TICKS(200));
                         }
                 } while (!returnVal  && ++count < 3);
@@ -127,22 +129,23 @@ static bool readTemps(uint index)
                 if (result == charger[index].ku8MBSuccess)
                 {
                         chargerValues[index][BATTERY_TEMP] = charger[index].getResponseBuffer(0x00);
-#if DEBUG
-                        Serial.print("Battery Temp: ");
-                        Serial.println(chargerValues[index][BATTERY_TEMP]);
-#endif
+DBG_SECT(
+                        rprintD("Battery Temp: ");
+                        rprintDln(chargerValues[index][BATTERY_TEMP]);
+)
                         chargerValues[index][CONTROLLER_INTERNAL_TEMP] = charger[index].getResponseBuffer(0x01);
-#if DEBUG
-                        Serial.print("Controller internal Temp: ");
-                        Serial.println(chargerValues[index][CONTROLLER_INTERNAL_TEMP]);
-#endif
+DBG_SECT(
+                        rprintD("Controller internal Temp: ");
+                        rprintDln(chargerValues[index][CONTROLLER_INTERNAL_TEMP]);
+)
                         chargerValues[index][CONTROLLER_INTERNAL_TEMP] = charger[index].getResponseBuffer(0x02);
-#if DEBUG
-                        Serial.print("Controller Power component Temp: ");
-                        Serial.println(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);
-#endif
+DBG_SECT(
+                        rprintD("Controller Power component Temp: ");
+                        rprintDln(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);
+)
                         returnVal = true;
                 }
+                DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %x\n", result);})
                 vTaskDelay(pdMS_TO_TICKS(200));
                 result = charger[index].readInputRegisters(0x311B, 1);
                 xSemaphoreGive(gSerial2Mutex);
@@ -150,12 +153,13 @@ static bool readTemps(uint index)
                 {
 
                         chargerValues[index][BATTERY_EXTERNAL_TEMP] = charger[index].getResponseBuffer(0x00);
-#if DEBUG
-                        Serial.print("Battery external Temp: ");
-                        Serial.println(chargerValues[index][BATTERY_EXTERNAL_TEMP]);
-#endif
+DBG_SECT(
+                        rprintD("Battery external Temp: ");
+                        rprintDln(chargerValues[index][BATTERY_EXTERNAL_TEMP]);
+)
                         returnVal = true;
                 }
+                 DBG_SECT( else {DEBUG_E("Reading charger external TMP failed with %x\n", result);})
         }
         return returnVal;
 }
@@ -172,9 +176,20 @@ static bool readStates(uint index)
                         chargerValues[index][BATTERY_STATUS] = charger[index].getResponseBuffer(0x00);
                         chargerValues[index][CONTROLLER_STATUS] = charger[index].getResponseBuffer(0x01);
                         returnVal = true;
-                }
+                } 
+                 DBG_SECT( else {DEBUG_E("Reading charger states failed with %x\n", result);})
         }
         return returnVal;
+}
+
+
+void setUpdateMillis()
+{
+        gChargerUpdateIntervalMilis = atol(gChargerUpdateIntervalValue) * 1000;
+        if (gChargerUpdateIntervalMilis < 5000)
+        {
+                gChargerUpdateIntervalMilis = 5000;
+        }
 }
 
 void updateController(uint index)
@@ -182,34 +197,42 @@ void updateController(uint index)
         bool result = false;
         bool newResult = false;
         unsigned int cnt;
-#if DEBUG
-        Serial.print("Updating controller ");
-        Serial.println(index + 1);
-#endif
-        
-        vTaskDelay(pdMS_TO_TICKS(200));
+        static int iteration = 0;
+
+        DEBUG_D("Updating controller %d",index+1);
+               
+        vTaskDelay(pdMS_TO_TICKS(100));
         result = chargerReadPvAndBattery(index);
         unsigned int value = chargerValues[index][CHARGER_READ_ERROR];
         cnt = value >> 2*8;
         cnt = result ? 0 : cnt+1;
         chargerValues[index][CHARGER_READ_ERROR] = (value & 0x00FFFF) | (cnt <<2*8);
-        
-        vTaskDelay(pdMS_TO_TICKS(200));
-        newResult = readTemps(index) ;
-        value = chargerValues[index][CHARGER_READ_ERROR];  
-        cnt = (value >> 1*8 ) & 0xFF;
-        cnt = newResult ? 0 : cnt+1;      
-        chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFF00FF) | (cnt <<1*8);
-        result = newResult || result;
 
-        vTaskDelay(pdMS_TO_TICKS(200));
-        newResult = readStates(index) || result;                
-        value = chargerValues[index][CHARGER_READ_ERROR];
-        cnt = value & 0xFF;
-        cnt = newResult ? 0 : cnt+1;              
-        chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFFFF00) | cnt;
-
-        result = newResult || result;
+        if (!iteration)
+        {
+                // Read only each 3rd time
+                vTaskDelay(pdMS_TO_TICKS(100));
+                newResult = readTemps(index);
+                value = chargerValues[index][CHARGER_READ_ERROR];
+                cnt = (value >> 1 * 8) & 0xFF;
+                cnt = newResult ? 0 : cnt + 1;
+                chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFF00FF) | (cnt << 1 * 8);
+                result = newResult || result;
+        }
+        else
+        {
+                if (iteration == 1)
+                {
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                        newResult = readStates(index) || result;
+                        value = chargerValues[index][CHARGER_READ_ERROR];
+                        cnt = value & 0xFF;
+                        cnt = newResult ? 0 : cnt + 1;
+                        chargerValues[index][CHARGER_READ_ERROR] = (value & 0xFFFF00) | cnt;
+                        result = newResult || result;
+                }
+        }
+        iteration = (iteration+1) % 3;
         gChargerValuesChanged[index] = result;
 }
 
@@ -217,10 +240,10 @@ void chargeControllerThradFunc(void *)
 {
         if (gChargerNumValidChargers == 0)
         {
-#if DEBUG
-                Serial.println("Charge controller: No valid controllers");
+DBG_SECT(
+                rprintDln("Charge controller: No valid controllers");
 
-#endif
+)
                 // That is an error and shouldn't happen!
                 vTaskDelete(xTaskGetCurrentTaskHandle());
         }
@@ -245,28 +268,25 @@ void chargeControllerThradFunc(void *)
         }
 }
 
+
+
 void chargeControllerSetup()
 {
         TaskHandle_t taskId;
-        
-        gSerial2Mutex = xSemaphoreCreateMutexStatic( &xSemaphoreBuffer );
+
+        gSerial2Mutex = xSemaphoreCreateMutexStatic(&xSemaphoreBuffer);
         gChargerNumValidChargers = calculateChargerIds();
-        gChargerUpdateIntervalMilis = atol(gChargerUpdateIntervalValue) * 1000;
-        if (gChargerUpdateIntervalMilis < 5000)
-        {
-                gChargerUpdateIntervalMilis = 5000;
-        }
-        #if DEBUG
-        Serial.print("Num controllers : ");
-        Serial.println(gChargerNumValidChargers);
-#endif
+        setUpdateMillis();
+        DBG_SECT(
+            rprintD("Num controllers : ");
+            rprintDln(gChargerNumValidChargers);)
         if (gChargerNumValidChargers > 0)
         {
                 BaseType_t result = xTaskCreate(chargeControllerThradFunc, "chrgCntrl", 2048, 0, 1, &taskId);
                 if (result != pdPASS)
                 {
-                        Serial.print(" Charge Controller taskCreation failed with error ");
-                        Serial.println(result);
+                        rprintE(" Charge Controller taskCreation failed with error ");
+                        rprintEln(result);
                 }
         }
 }

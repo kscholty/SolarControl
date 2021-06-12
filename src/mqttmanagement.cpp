@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "common.h"
+#include "debugManagement.h"
 #include "inverterManagement.h"
 #include "mqttmanagement.h"
 
@@ -26,14 +27,14 @@ static long lastReconnectAttempt = 0;
 
 static const char *topics[ValueNumValues] = {"power","current","voltage", "pf"};
 
-#if DEBUG
+DBG_SECT(
 static bool _mqttEnabled = true;
 
 void mqttDisable()
 {
     if (_mqttEnabled)
     {
-        Serial.println("Disabling mqtt");
+        DEBUG_I("Disabling mqtt");
         _mqttEnabled = false;
         mqttClient.disconnect();
     }
@@ -41,14 +42,14 @@ void mqttDisable()
 
 void mqttEnable() {
     if(!_mqttEnabled) {
-        Serial.println("Enabling mqtt");
+        DEBUG_I("Enabling mqtt");
         _mqttEnabled = true;
         mqttReconnect();
     }
 }
 
 bool mqttEnabled() { return _mqttEnabled; }
-#endif
+)
 
 bool mqttReconnect()
 {    
@@ -64,14 +65,14 @@ bool mqttReconnect()
         for (int i = 0; i < ValueNumValues; ++i)
         {
             String subscription = subscriptionBase + topics[i];
-#if DEBUG
-            Serial.println("Subscribing to ");
-            Serial.println(subscription);
-#endif
+            DEBUG_I("Subscribing to %s",subscription.c_str());
             if (!mqttClient.subscribe(subscription.c_str()))
             {
-                Serial.print("MQQT Subscribe failed\n Topic:");
-                Serial.println(subscription);
+                if (Debug.isActive(Debug.ERROR))
+                {
+                    Debug.print("MQQT Subscribe failed\n Topic:");
+                    Debug.println(subscription);
+                }
             }
         }
     }
@@ -80,21 +81,22 @@ bool mqttReconnect()
 
 static void parseEm3Result(const char *txt, const char *payload)
 {
-
     int aLeg = txt[legPosInMessage] - 48;
     float aValue = atof(payload);
 
     if (aLeg < 0 || aLeg > 2 || aValue == 0.0)
     {
-#if DEBUG
-        Serial.println("Could not parse message from EM3");
-        Serial.print(txt[legPosInMessage]);
-        Serial.print(" : ");
-        Serial.println(payload);
-        Serial.print(aLeg);
-        Serial.print(" : ");
-        Serial.println(aValue);
-#endif
+        DBG_SECT(
+            if (Debug.isActive(Debug.ERROR))
+            {
+                Debug.println("Could not parse message from EM3");
+                Debug.print(txt[legPosInMessage]);
+                Debug.print(" : ");
+                Debug.println(payload);
+                Debug.print(aLeg);
+                Debug.print(" : ");
+                Debug.println(aValue);
+            })
     }
     else
     {
@@ -106,60 +108,62 @@ static void parseEm3Result(const char *txt, const char *payload)
             {
                 gGridLegValues[i][aLeg] = aValue;
                 gGridSumValues[i] = gGridLegValues[i][0] + gGridLegValues[i][1] + gGridLegValues[i][2];
-                if(i == ValuePowerFactor && gGridLegValues[i][aLeg] < 0) {
+                if (i == ValuePowerFactor && gGridLegValues[i][aLeg] < 0)
+                {
                     gGridLegValues[i][aLeg] = fabs(gGridLegValues[i][aLeg]);
                 }
                 gInverterGridPowerUpdated();
                 break;
             }
         }
-#if DEBUG_ON
-
-        if (i < ValueNumValues)
-        {
-            Serial.print("Leg ");
-            Serial.print(aLeg);
-            Serial.print(": ");
-            Serial.print(aValue);
-            Serial.print(" Sum: ");
-            Serial.println(gGridSumValues[i]);
-        }
-        else
-        {
-            Serial.print("Unknown topic ");
-            Serial.println(valueType);
-        }
-#endif        
+        DBG_SECT(
+            if (Debug.isActive(Debug.VERBOSE))
+            {
+                if (i < ValueNumValues)
+                {
+                    Debug.print("Leg ");
+                    Debug.print(aLeg);
+                    Debug.print(": ");
+                    Debug.print(aValue);
+                    Debug.print(" Sum: ");
+                    Debug.println(gGridSumValues[i]);
+                }
+                else
+                {
+                    Debug.print("Unknown topic ");
+                    Debug.println(valueType);
+                }
+            })
     }
 }
 
 void mqttHandleMessage(const char *topic, byte *payload, unsigned int length)
 {
-#if DEBUG_ON
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
-    for (int i = 0; i < length; i++)
-    {        
-        Serial.print((char)payload[i]);
-    }
-    Serial.println();
-#endif
+    DBG_SECT(
+        if (Debug.isActive(Debug.VERBOSE))
+        {
+            Debug.printf("Message arrived [%s]\n",topic);            
+            for (int i = 0; i < length; i++)
+            {
+                Debug.print((char)payload[i]);
+            }
+            Debug.println();
+        })
 
     String txt(topic);
-    char value[length+1];
+    char value[length + 1];
     int namePos = txt.indexOf(mqttEM3Name, 9);
-    if(namePos >= 0 && length > 0 && legPosInMessage >= 0) {             
+    if (namePos >= 0 && length > 0 && legPosInMessage >= 0)
+    {
         memcpy(value,payload,length);
         value[length]=0;
         parseEm3Result(topic, value);
-    } 
-#if DEBUG
-    else {
-        Serial.println("Unknown Message");
     }
-#endif
-
+DBG_SECT(
+    else {
+        DEBUG_W("MQTT: Unknown Message");
+    }
+)
 }
 
 void mqttSetupMqtt() {
@@ -185,9 +189,9 @@ static void mqttLoop()
     {
         if (!mqttClient.connected())
             {
-#if DEBUG
+DBG_SECT(
             if (_mqttEnabled)
-#endif
+)
             {
                 unsigned long now = millis();
                 if (now - lastReconnectAttempt > 5000)
@@ -224,8 +228,11 @@ void mqttSetup()
     BaseType_t result = xTaskCreate(mqttThradFunc, "mqtt", 2048, 0, 2, &handle);
     if (result != pdPASS)
     {
-        Serial.print(" MQTT taskCreation failed with error ");
-        Serial.println(result);
+        if (Debug.isActive(Debug.ERROR))
+        {
+            Debug.print(" MQTT taskCreation failed with error ");
+            Debug.println(result);
+        }
         gInverterTaskHandle = 0;
     }
 }

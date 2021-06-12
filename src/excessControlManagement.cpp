@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "common.h"
 
+#include "debugManagement.h"
 #include "excessControlManagement.h"
 #include "chargeControllerManagement.h"
 #include "inverterManagement.h"
@@ -124,9 +125,12 @@ void setupExcessManagement()
         BaseType_t result = xTaskCreate(excessManagementLoop, "excess", 2048, 0, 2, &gExcessTaskId);
         if (result != pdPASS)
         {
-            Serial.print("excess taskCreation failed with error ");
-            Serial.println(result);
+            if (Debug.isActive(Debug.ERROR)) {
+                Debug.print("excess taskCreation failed with error ");
+                Debug.println(result);
+            }
             gExcessTaskId = 0;
+
         }
     }
 }

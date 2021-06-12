@@ -2,6 +2,7 @@
 #pragma once
 
 #include "common.h"
+#include "debugManagement.h"
 #define BLYNK_STRLEN 64
 
 #define BLYNK_GREEN     "#23C48E"
@@ -10,10 +11,9 @@
 #define BLYNK_RED       "#D3435C"
 #define BLYNK_DARK_BLUE "#5F7CD8"
 
-#if DEBUG
+DBG_SECT(
 #define BLYNK_VPIN_MQTT_ENABLE V100
-
-#endif
+)
 
 #define BLYNK_VPIN_LEG_0 V0
 #define BLYNK_VPIN_LEG_1 V1

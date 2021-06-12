@@ -8,6 +8,7 @@
 #include "bmsManagement.h"
 #include "ssrManagement.h"
 #include "excessControlManagement.h"
+#include "debugManagement.h"
 
 
 void setup() {
@@ -23,6 +24,7 @@ void setup() {
   bmsSetup();
   setupExcessManagement(); // Has to be after the inverter
   blynkSetup(); // This should be last, in order to have all data available
+  debugSetup();
   //ssrSetup();
 }
 
@@ -31,6 +33,7 @@ void loop() {
   unsigned long now = millis();
   wifiLoop(now);
   blynkLoop(now);
+  debugLoop(now);
   //ssrLoop(now);
 }
 

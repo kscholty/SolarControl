@@ -3,6 +3,7 @@
 //#include <Dusk2Dawn.h>
 
 #include "common.h"
+#include "debugManagement.h"
 #include "ssrManagement.h"
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
@@ -46,10 +47,9 @@ bool ssrSwitch(CHARGERS charger, bool on)
     bool ret = chargerEnabled[charger];
     chargerEnabled[charger] = on;
     digitalWrite(chargerPin[charger], on?HIGH:LOW);  
-    #if DEBUG
-    Serial.print("Switching ");
-    Serial.println(charger);
-    #endif
+    DBG_SECT(
+    DEBUG_D("Switching %d",(int)charger);
+    )
     return ret;
 }
 
@@ -70,10 +70,8 @@ void ssrSetup() {
     longitude = atof(gLongitudeValue);
     timezone = atoi(gTimezoneValue);
     nextEvent = dayNightCalcEvents();
-    #if DEBUG
-    Serial.print("Next event is ");
-    Serial.println(nextEvent);
-    #endif
+
+    DEBUG_D("Day/Night: Next event is %d",nextEvent);
 }
 
 void handleBatteryFull()
@@ -110,24 +108,25 @@ static DayNightEventType dayNightCalcEvents()
      DailyEvents[EvSunset] = millisNow + (sunset - sinceMidnight) * 1000;
      DailyEvents[EvMidnight] = millisNow + (24 * 60 * 60 - sinceMidnight) * 1000;
 
-#if DEBUG
+DBG_SECT(
+   if (Debug.isActive(Debug.VERBOSE)) {
     char tod[128];
     strftime(tod,128,"%A, %B %d %Y %H:%M:%S",&now) ;
-    Serial.println(tod);
-     Serial.print("Lat/Lon ");
-     Serial.print(latitude);
-     Serial.print(",");
-     Serial.println(longitude);
-     Serial.print("Timezone ");
-     Serial.println(timezone);
-     Serial.print("Sunset: ");
-     Serial.println(sunset);
-     Serial.println(sunset/60/60);
-     Serial.print("Sunrise: ");
-     Serial.println(sunrise);
-     Serial.print("sinceMidnight: ");
-     Serial.println(sinceMidnight);
-#endif
+    Debug.println(tod);
+     Debug.print("Lat/Lon ");
+     Debug.print(latitude);
+     Debug.print(",");
+     Debug.println(longitude);
+     Debug.print("Timezone ");
+     Debug.println(timezone);
+     Debug.print("Sunset: ");
+     Debug.println(sunset);
+     Debug.println(sunset/60/60);
+     Debug.print("Sunrise: ");
+     Debug.println(sunrise);
+     Debug.print("sinceMidnight: ");
+     Debug.println(sinceMidnight);
+   })
      if (sinceMidnight < sunrise)
      {
        ret = EvSunrise;
@@ -188,10 +187,8 @@ static void onSunrise()
      nextEvent = dayNightCalcEvents();
      break;
    }
-    #if DEBUG
-    Serial.print("Next event is ");
-    Serial.println(nextEvent);
-    #endif
+    
+      DEBUG_D("Day/Night: Next event is %d", nextEvent);    
    return nextEvent;
  }
 
