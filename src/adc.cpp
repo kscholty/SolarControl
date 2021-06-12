@@ -27,7 +27,7 @@
 //I2S built-in ADC unit
 #define I2S_ADC_UNIT       ADC_UNIT_1
 //I2S built-in ADC channel
-#define I2S_ADC_CURRENT_CHANNEL     ADC1_CHANNEL_4
+#define I2S_ADC_CURRENT_CHANNEL     ADC1_CHANNEL_0
 #define I2S_ADC_VOLTAGE_CHANNEL     ADC1_CHANNEL_5
 
 // how many buffers do we want to use for DMA
@@ -266,8 +266,6 @@ bool adcInit()
 
     mutex = xSemaphoreCreateMutex();
 
-    
-    
     //adcReadCalibrationData();
 
     memset(oldCurrentVals,0,ADC_AVERAGE_COUNT*sizeof(*oldCurrentVals));

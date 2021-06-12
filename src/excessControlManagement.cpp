@@ -15,7 +15,7 @@
 // We check every 10 seconds
 #define HOLDTIME 10000
 #define EXCESSSTEP 30
-#define EPSILON ((EXCESSSTEP) / 2)
+#define EPSILON ((EXCESSSTEP) / 3)
 
 int gExcessTarget = 0.0;
 TaskHandle_t gExcessTaskId = 0;
