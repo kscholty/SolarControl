@@ -157,8 +157,6 @@ void wifiSetup()
   server.on("/", handleRoot);
   server.on("/config", [] { iotWebConf.handleConfig(); });
   server.onNotFound([]() { iotWebConf.handleNotFound(); });
-
-  Serial.println("Ready.");
 }
 
 void wifiLoop(unsigned long now)
@@ -193,7 +191,6 @@ void handleRoot()
   } else {
     strcpy(tod,"unknown");
   }
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
   String s = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/>";
   s += "<title>Solar controller</title></head><body>";

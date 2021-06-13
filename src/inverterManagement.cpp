@@ -1,11 +1,12 @@
 
 
 #include <Arduino.h>
+#include "debugManagement.h"
 #include "excessControlManagement.h"
 #include "inverterManagement.h"
 #include "adc.h"
 
-#if DEBUG
+#if DBUG_ON
 #include "mqttmanagement.h"
 
 int lastModification = 0;
@@ -148,9 +149,8 @@ static void inverterLoop()
             // MQTT has a problem it seems...
             // So let's go to our  default output
             gInverterTarget = inverterEmergencyTarget;
-#if DEBUG
-            //Serial.println("Inverter detected timeout. MQTT not running");
-#endif
+
+            DEBUG_W("Inverter detected timeout. MQTT not running");
         }
         // Seems to work fine...
         inverterUnlock();
@@ -183,20 +183,21 @@ static void inverterLoop()
             pinValue = LOW;
         }
         digitalWrite(INVERTERPIN, pinValue);
-
-#if DEBUG
-        static unsigned long lastPrint = 0;
-        if (millis() - lastPrint > 1000)
-        {
-            lastPrint = millis();
-            Serial.print(" Z: ");
-            Serial.print(gInverterTarget);
-            Serial.print(" I: ");
-            Serial.print(gInverterPower);
-            Serial.print(" C ");
-            Serial.println(gInverterCurrent);
-        }
-#endif
+        DBG_SECT(
+            if (Debug.isActive(Debug.DEBUG))
+            {
+                static unsigned long lastPrint = 0;
+                if (millis() - lastPrint > 1000)
+                {
+                    lastPrint = millis();
+                    Debug.print(" Z: ");
+                    Debug.print(gInverterTarget);
+                    Debug.print(" I: ");
+                    Debug.print(gInverterPower);
+                    Debug.print(" C ");
+                    Debug.println(gInverterCurrent);
+                }
+            })
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
     }
 }
@@ -212,8 +213,10 @@ void inverterSetup()
     BaseType_t result = xTaskCreate(inverterThradFunc, "inverter", 4096, 0, 2, &gInverterTaskHandle);
     if (result != pdPASS)
     {
-        Serial.print("Inverter taskCreation failed with error ");
-        Serial.println(result);
+        if (Debug.isActive(Debug.ERROR)) {
+            Debug.print("Inverter taskCreation failed with error ");
+            Debug.println(result);
+        }
         gInverterTaskHandle = 0;
     }    
 }

@@ -16,10 +16,10 @@ extern bool mqttReconnect();
 extern char mqttEM3Name[STRING_LEN];
 extern char mqttEM3Topic[STRING_LEN];
 
-#if DEBUG
+DBG_SECT(
 #define BLYNKPORT V50
 extern void mqttDisable();
 extern void mqttEnable();
 extern bool mqttEnabled();
-#endif
+)
 

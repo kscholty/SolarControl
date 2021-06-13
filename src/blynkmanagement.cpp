@@ -1,14 +1,16 @@
 
-#define BLYNK_SEND_ATOMIC
+#include "debugManagement.h"
 
-#if DEBUG
-#define BLYNK_PRINT Serial
-#endif 
+#define BLYNK_SEND_ATOMIC
+#define BLYNK_PRINT if (Debug.isActive(Debug.DEBUG)) Debug
+
 
 #include <BlynkApiArduino.h>
 #include <Blynk/BlynkProtocol.h>
 #include <Adapters/BlynkArduinoClient.h>
 #include <WiFi.h>
+
+
 
 #include "blynkmanagement.h"
 #include "inverterManagement.h"
@@ -64,9 +66,9 @@ BlynkWifi Blynk(_blynkTransport);
 
 void blynkUpdateGrid()
 {
-#if DEBUG
-    Serial.println("Updating grid data on Blynk");
-#endif
+DBG_SECT(
+    DEBUG_V("Updating grid data on Blynk");
+)
     Blynk.virtualWrite(BLYNK_VPIN_LEG_0, gGridLegValues[ValuePower][0]);
     Blynk.virtualWrite(BLYNK_VPIN_LEG_1, gGridLegValues[ValuePower][1]);
     Blynk.virtualWrite(BLYNK_VPIN_LEG_2, gGridLegValues[ValuePower][2]);
@@ -115,11 +117,9 @@ void blynkUpdateChargeController()
 
         if (gChargerValuesChanged[index])
         {
-#if DEBUG
-            Serial.print("Updating charge controller ");
-            Serial.print(index + 1);
-            Serial.println(" data on Blynk");
-#endif
+
+            DEBUG_V("Updating charge controller %d data on Blynk",index+1);            
+
             gChargerValuesChanged[index] = false;
             for (unsigned int i = 0; i < NUM_CHARGER_VALUES; ++i)
             {
@@ -262,9 +262,9 @@ bool isValid() {
 
 BLYNK_CONNECTED()
 {
-#if DEBUG
+DBG_SECT(
     Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);
-#endif
+)
     Blynk.virtualWrite(BLYNK_VPIN_BLE_CONNECTED, !gBmsDisconnect);
     if (!gBmsDisconnect)
     {
@@ -286,11 +286,11 @@ BLYNK_DISCONNECTED()
 
 void blynkReconnect()
 {
-    if(isValid()) {
-#if DEBUG
-        Serial.println("Starting Blynk connect");
-#endif
-        Blynk.connect(0);        
+    if (isValid())
+    {
+        DBG_SECT(
+            DEBUG_I("Starting Blynk connect");)
+        Blynk.connect(0);
     }
 }
 
@@ -357,7 +357,7 @@ BLYNK_WRITE(V58)
     }
 }
 
-#if DEBUG
+DBG_SECT(
 BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 {
     Serial.print("BLYNK_VPIN_MQTT_ENABLE changed: ");
@@ -377,4 +377,4 @@ BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
     gInverterGridPowerUpdated();    
 }
 
-#endif
+)

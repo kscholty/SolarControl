@@ -8,6 +8,7 @@
 #include "bmsManagement.h"
 #include "ssrManagement.h"
 #include "excessControlManagement.h"
+#include "debugManagement.h"
 
 
 void setup() {
@@ -16,21 +17,23 @@ void setup() {
   Serial.println();
   
   inverterPreInit();
-  //wifiSetup();
-  //mqttSetup();
-  //chargeControllerSetup();
+  wifiSetup();
+  mqttSetup();
+  chargeControllerSetup();
   inverterSetup();  
-  //bmsSetup();
-  //setupExcessManagement(); // Has to be after the inverter
-  //blynkSetup(); // This should be last, in order to have all data available
+  bmsSetup();
+  setupExcessManagement(); // Has to be after the inverter
+  blynkSetup(); // This should be last, in order to have all data available
+  debugSetup();
   //ssrSetup();
 }
 
 // This one is executed on CPU 1
 void loop() {
   unsigned long now = millis();
-  //wifiLoop(now);
-  //blynkLoop(now);
+  wifiLoop(now);
+  blynkLoop(now);
+  debugLoop(now);
   //ssrLoop(now);
 }
 

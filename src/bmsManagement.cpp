@@ -2,6 +2,7 @@
 #include <Arduino.h>
 
 #include "common.h"
+#include "debugManagement.h"
 #include "bmsManagement.h"
 
 
@@ -29,7 +30,6 @@ BmsCellInfo_t *gBmsCellInfo = 0;
 
 bool gBmsDisconnect = true;
 
-static unsigned long lastReconnectAttempt = 0;
 static uint8_t messagebuffer[MAXMESSAGESIZE];
 
 static TaskHandle_t taskId;
@@ -142,10 +142,9 @@ static bool processMessage(uint8_t *message, size_t length) {
     MessageHeader_t *header = (MessageHeader_t*)message;
 
     if(header->start != STARTBYTE || header->status != 0 || length != header->dataLen+7) {
-        #if DEBUG
-        Serial.println("Received invalid message");
-        #endif
-
+        
+        DEBUG_W("BMS: Received invalid message");
+        
         return false;
     }
 
@@ -186,47 +185,47 @@ static bool handleRequest(uint8_t *request, size_t length)
 }
 
 
-#if DEBUG
-void printCellInfo() //debug all data to uart
+DBG_SECT(
+void printCellInfo() //DBUG all data to uart
 {
 
-    Serial.printf("Number of cells: %u\n", gBmsCellInfo->getNumOfCells());
+    Debug.printf("Number of cells: %u\n", gBmsCellInfo->getNumOfCells());
     for (byte i = 0; i < gBmsCellInfo->getNumOfCells(); ++i)
     {
-        Serial.printf("Cell no. %u", i);
-        Serial.printf("   %f\n", (float)gBmsCellInfo->getCellVolt(i) / 1000);
+        Debug.printf("Cell no. %u", i);
+        Debug.printf("   %f\n", (float)gBmsCellInfo->getCellVolt(i) / 1000);
     }    
 }
 
-void printBasicInfo() //debug all data to uart
+void printBasicInfo() //DBUG_ON all data to uart
 {
     
-    Serial.printf("Total voltage: %f\n", (float)gBmsBasicInfo->getTotalVoltage() / 100);
-    Serial.printf("Amps: %f\n", (float)gBmsBasicInfo->getcurrent() / 100);
-    Serial.printf("CapacityRemainAh: %f\n", (float)gBmsBasicInfo->getcapacityRemain() / 100);
-    Serial.printf("CapacityRemainPercent: %d\n", gBmsBasicInfo->getstateOfCharge());    
-    Serial.printf("Balance Code Low: 0x%x\n", gBmsBasicInfo->getbalanceStatusLow());
-    Serial.printf("Balance Code High: 0x%x\n", gBmsBasicInfo->getbalanceStatusHigh());
-    Serial.printf("Mosfet Status: 0x%x\n", gBmsBasicInfo->getfetControlStatus());
-    Serial.printf("Cycle life: %d\n", gBmsBasicInfo->getcycleLife());
-    Serial.printf("Cells in Series: %d\n", gBmsBasicInfo->getcellsInSeries());
-    Serial.printf("NominalCapacity: %f\n", (float)gBmsBasicInfo->getnominalCapacity()/ 100.0);
-    Serial.printf("ProtectionStatus: 0x%x\n", gBmsBasicInfo->getprotectionStatus());
-    Serial.printf("Version: %d\n", gBmsBasicInfo->getversion());
+    Debug.printf("Total voltage: %f\n", (float)gBmsBasicInfo->getTotalVoltage() / 100);
+    Debug.printf("Amps: %f\n", (float)gBmsBasicInfo->getcurrent() / 100);
+    Debug.printf("CapacityRemainAh: %f\n", (float)gBmsBasicInfo->getcapacityRemain() / 100);
+    Debug.printf("CapacityRemainPercent: %d\n", gBmsBasicInfo->getstateOfCharge());    
+    Debug.printf("Balance Code Low: 0x%x\n", gBmsBasicInfo->getbalanceStatusLow());
+    Debug.printf("Balance Code High: 0x%x\n", gBmsBasicInfo->getbalanceStatusHigh());
+    Debug.printf("Mosfet Status: 0x%x\n", gBmsBasicInfo->getfetControlStatus());
+    Debug.printf("Cycle life: %d\n", gBmsBasicInfo->getcycleLife());
+    Debug.printf("Cells in Series: %d\n", gBmsBasicInfo->getcellsInSeries());
+    Debug.printf("NominalCapacity: %f\n", (float)gBmsBasicInfo->getnominalCapacity()/ 100.0);
+    Debug.printf("ProtectionStatus: 0x%x\n", gBmsBasicInfo->getprotectionStatus());
+    Debug.printf("Version: %d\n", gBmsBasicInfo->getversion());
 
-    Serial.println("Temps");
+    Debug.println("Temps");
     for(int i = 0;i<gBmsBasicInfo->getnumTempSensors();++i) {
-        Serial.printf("Temp %d: %f \n", i, (float)gBmsBasicInfo->getTemp(i) / 10.0);
+        Debug.printf("Temp %d: %f \n", i, (float)gBmsBasicInfo->getTemp(i) / 10.0);
     }
 }
 
-#endif
+)
 
 static bool readBasicData()
 {
     static uint8_t request[7] = {0xdd, 0xa5, 0x03, 0x00, 0xff, 0xfd, 0x77};
 
-    // This is only for debug purposes
+    // This is only for DBUG_ON purposes
     static uint8_t result[] = {0xDD, 0x03, 0x00, 0x1B, 0x17, 0x00, 0x00, 0x00, 0x02, 0xD0, 0x03, 0xE8, 0x00, 0x00, 0x20, 0x78, 0x01, 0x02,
                                0x00, 0x00, 0x02, 0x04, 0x10, 0x48, 0x03, 0x0F, 0x02, 0x0B, 0x76, 0x0B, 0x82, 0xFB, 0xFF, 0x77};
     memcpy(messagebuffer, result, sizeof(result));
@@ -235,9 +234,11 @@ static bool readBasicData()
     // Uncomment this in real software
     //handleRequest(request, 7);
 
-#if DEBUG
-    printBasicInfo();
-#endif
+DBG_SECT(
+    if (Debug.isActive(Debug.DEBUG)) {
+        printBasicInfo();
+    }
+)
     return false;
 }
 
@@ -252,12 +253,14 @@ static bool readCellValues()
 
     //handleRequest(request, 7);
 
-#if DEBUG
+DBG_SECT(
+    if (Debug.isActive(Debug.DEBUG)) {
     if (gBmsCellInfo)
     {
         printCellInfo();
     }
-#endif
+    }
+)
     return false;
 }
 
@@ -289,8 +292,8 @@ void bmsSetup()
 
         if (result != pdPASS)
         {
-            Serial.print(" BMS taskCreation failed with error ");
-            Serial.println(result);
+            rprintE(" BMS taskCreation failed with error ");
+            rprintEln(result);
         }
     }
 }

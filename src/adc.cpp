@@ -9,6 +9,7 @@
 #include <esp_adc_cal.h>
 
 #include "common.h"
+#include "debugManagement.h"
 
 
 //i2s number
@@ -316,7 +317,6 @@ void readAdc(void *buffer)
 
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
-
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
@@ -325,8 +325,8 @@ void readAdc(void *buffer)
         //printBuffer(i2s_read_buff);
         calculate(&results[0], &results[1]);
     }
-
-    Serial.println(" Adc task exiting... ");
+    
+    DEBUG_I(" Adc task exiting... ");
     // Clean up and exit
     i2s_adc_disable(I2S_NUM);
     i2s_stop(I2S_NUM);
@@ -399,9 +399,9 @@ void calculateCurrent(bufStruct *currentBuf)
         double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
         //double val = value;
         if(val<0) val = 0;
-#if DEBUG
+DBG_SECT(
         avgRaw += val;    
-#endif
+)
 
         // We know that the voltage is between 0 and 3333mV
         // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1631
@@ -414,7 +414,7 @@ void calculateCurrent(bufStruct *currentBuf)
         #undef MAX_A
 #if DEBUG
         avgAdj += val;
-#endif        
+)     
         sum += (val * val);
     }
 #if DEBUG
@@ -518,13 +518,12 @@ void calculateVoltage(bufStruct *voltageBuf)
     } else {
         avgVoltage += adcGetVoltage();
     }
-    #if DEBUG
-    if(!counter) {
-        unsigned long duration = millis()-start;
-        Serial.print("calc took "); Serial.println(duration);
+
+DBG_SECT(
+    if(!counter) {        
+        DEBUG_D("calc took %ld", millis()-start);
     }
-    
-    #endif
+)
 }
 
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)

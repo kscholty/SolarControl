@@ -2,8 +2,6 @@
 
 #pragma once
 
-#define DEBUG 0
-
 #define STRING_LEN 40
 #define NUMBER_LEN 32
 
@@ -11,3 +9,4 @@
 static const char thingName[] = "SolarGridController";
 
 extern SemaphoreHandle_t gSerial2Mutex;
+
