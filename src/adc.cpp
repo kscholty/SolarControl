@@ -38,7 +38,7 @@
 // to get a more stable reading
 #define ADC_AVERAGE_COUNT 8
 
-#define SAMPLESIZE 4
+#define SAMPLESIZE 2
 
 
 typedef uint16_t buffer_t[SAMPLESIZE * READ_LEN / sizeof(int16_t)];
@@ -51,8 +51,10 @@ struct bufStruct {
 IRAM_ATTR void readAdc(void *);
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf);
 void printBuffer(bufStruct *);
-void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]);
+void splitBuffer(const bufStruct *input, size_t startInputIndex, bufStruct outputChannels[2]);
 double adcGetVoltage();
+void denoiseBuffer(bufStruct *buff);
+void calibration(size_t);
 
 // The sum of suared values. Basis for 
 // calculation of root...
@@ -67,146 +69,12 @@ ICACHE_RAM_ATTR static double oldVoltageVals[ADC_AVERAGE_COUNT];
 int oldCurrentValsPos = 0;
 int oldVoltageValsPos = 0;
 
+DBG_SECT(
+bool doCalibration = false;
+)
+
 static volatile bool stopAdcUsage=false;
 esp_adc_cal_characteristics_t *adc_chars;
-
-#if 0
-hw_timer_t * timer = NULL;
-
-template <class T>
-class RingBuffer
-{
-public:
-    RingBuffer(size_t size=1000);
-    ~RingBuffer();
-    T &head();
-    T get();
-    void push(const T& value);
-    size_t count();
-    bool empty() { return (begin == end);};
-private:
-T *buffer;
-T *begin,*end, *wrap;
-};
-
-template <class T>
-RingBuffer<T>::RingBuffer(size_t size) 
-{
-    buffer = new T[size+1];
-    begin = end = buffer;
-    wrap = buffer+size+1;
-}
-
-template <class T>
-IRAM_ATTR T& RingBuffer<T>::head() {
-    return *begin;
-}
-
-template <class T>
-IRAM_ATTR T RingBuffer<T>::get() {
-    T result = *begin;
-    if(!empty()) {
-        ++begin;
-        if(begin >= wrap) {
-            begin = buffer;
-        }
-    }
-    return result;
-}
-
-template <class T>
-RingBuffer<T>::~RingBuffer() 
-{ 
-    delete [] buffer;
-}
-    
-template <class T>
-IRAM_ATTR void RingBuffer<T>::push(const T& value) {
-    *end = value;
-    if(++end >= wrap) {
-        end = buffer;
-    }
-     if(begin == end) {
-        ++begin;
-        if(begin >= wrap) {
-            begin = buffer;
-        }
-    }
-}
-
-template <class T>
-size_t RingBuffer<T>::count()
-{
-    size_t result;
-    if (end >= begin)
-    {
-        result = end - begin;
-    }
-    else
-    {
-        result = begin - end + wrap - begin;
-    }
-    return result;
-}
-
-#define BUFSIZE 200
-DRAM_ATTR  RingBuffer<double> buffer(BUFSIZE);
-DRAM_ATTR double sum= 0.0;
-unsigned int count=0;
-portMUX_TYPE DRAM_ATTR timerMux = portMUX_INITIALIZER_UNLOCKED; 
-
-int IRAM_ATTR local_adc1_read(int channel) {
-    uint16_t adc_value;
-    SENS.sar_meas_start1.sar1_en_pad = (1 << channel); // only one channel is selected
-    while (SENS.sar_slave_addr1.meas_status != 0);
-    SENS.sar_meas_start1.meas1_start_sar = 0;
-    SENS.sar_meas_start1.meas1_start_sar = 1;
-    while (SENS.sar_meas_start1.meas1_done_sar == 0);
-    adc_value = SENS.sar_meas_start1.meas1_data_sar;
-    return adc_value;
-}
-
-double IRAM_ATTR calcI(int raw) {
-    // Raw is between 0-4095 This is a value between -10A and 10A
-    // So 2048 is 0. So we calculate (raw -2048)/2048*10 
-    double result = (double) raw / 204.8d - 10;
-    Serial.print("RESULT "); Serial.println(result);
-    return result * result;
-}
-
-void IRAM_ATTR onTimer() {
-    //portENTER_CRITICAL_ISR(&timerMux);
-    //int value = local_adc1_read(0);
-    int value = adc1_get_raw(ADC1_CHANNEL_0);
-    //double newVal = calcI(value);
-
-    //double newSum = sum-buffer.head()+newVal;
-    //sum = newSum;
-    //buffer.push(newVal);
-    //portEXIT_CRITICAL_ISR(&timerMux);
-}
-
-
-
-void adcInit()
-{
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
-    timer = timerBegin(0, 80, true);
-    timerAttachInterrupt(timer, &onTimer, true);
-    timerAlarmWrite(timer, 20000, true);
-
-    for (int i = 0; i < BUFSIZE; ++i)
-    {
-        int value = adc1_get_raw(ADC1_CHANNEL_0);
-        buffer.push(calcI(value));
-        delayMicroseconds(4000);
-    }
-    timerAlarmEnable(timer);
-    count = BUFSIZE;
-}
-#endif
-
 
 
 void characterize() {
@@ -250,7 +118,7 @@ bool adcInit()
      i2s_driver_install(I2S_NUM, &i2s_config, ADC_BUFFER_COUNT, &i2s_event_queue);
      
      //init ADC pad
-     //i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CURRENT_CHANNEL);#
+     //i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CURRENT_CHANNEL);
 
      // This is the trick that makes it work. 
      // You have to call it with a 0 here. Not calling it won't work, but calling it with a correct
@@ -275,11 +143,12 @@ bool adcInit()
      return true;
 }
 
-void readValues(bufStruct *recBuffer)
+void readValues(bufStruct *recBuffer, bufStruct *results)
 {
     system_event_t evt;
     uint16_t *buffer = recBuffer->buffer;
     size_t read = 0;
+    size_t oldCount;
     recBuffer->count = 0;
     for (int i = 0; i < SAMPLESIZE; ++i)
     {
@@ -290,14 +159,12 @@ void readValues(bufStruct *recBuffer)
                 {
                     //read data from I2S bus, in this case, from ADC.
                     i2s_read(I2S_NUM, buffer, READ_LEN, &read, 0);
-                    recBuffer->count += read / sizeof(uint16_t);        
+                    oldCount = recBuffer->count;
+                    recBuffer->count += read / sizeof(uint16_t);   
+                    splitBuffer(recBuffer, oldCount,  results);     
                     buffer = recBuffer->buffer + recBuffer->count;            
                 }
-            }
-            else
-            {
-                Serial.println("Could not get buffer");
-            }
+            }            
         }
     }
    // Serial.printf("Read %d values\n",recBuffer->count);
@@ -320,12 +187,22 @@ void readAdc(void *buffer)
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
-        readValues(i2s_read_buff);
-        splitBuffer(i2s_read_buff, results);
-        //printBuffer(i2s_read_buff);
-        calculate(&results[0], &results[1]);
+        DBG_SECT(
+            if (doCalibration)
+            {
+                calibration(100);
+            } else
+        )
+        {
+            results[0].count = 0;
+            results[1].count = 0;
+            readValues(i2s_read_buff, results);
+            //splitBuffer(i2s_read_buff, 0,  results);
+            //printBuffer(i2s_read_buff);
+            calculate(&results[0], &results[1]);
+        }
     }
-    
+
     DEBUG_I(" Adc task exiting... ");
     // Clean up and exit
     i2s_adc_disable(I2S_NUM);
@@ -333,6 +210,60 @@ void readAdc(void *buffer)
     i2s_driver_uninstall(I2S_NUM);
     readTask = 0;
     vTaskDelete(xTaskGetCurrentTaskHandle());
+}
+
+#ifndef DEBUG_DISABLED
+bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average) {
+
+    denoiseBuffer(values);
+    maxV = 0; 
+    minV = 4096;
+    average = 0;
+    
+    for(size_t i = 0;i<values->count;++i) {
+        uint16_t value = values->buffer[i];
+        double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
+        maxV = max (maxV,val);
+        minV = min(minV,val);       
+        average += val;
+    }
+    average /= values->count;    
+    return true;
+}
+
+void calibration(size_t iterations = 100) {
+    
+    double avgMax[2] = {0,0};
+    double avgMin[2] = {0,0};
+    double avgAvg[2] = {0,0};
+
+    bufStruct *i2s_read_buff = (bufStruct *)calloc(1, sizeof(bufStruct));
+    bufStruct *results = (bufStruct *)calloc(2, sizeof(bufStruct));
+    for(int i = 0; i<iterations;++i) {
+        double min,max,avg;
+        readValues(i2s_read_buff, results);        
+        calculateCalibrationValues(&results[0],min,max,avg);
+        avgMax[0] += max;
+        avgMin[0] += min;
+        avgAvg[0] += avg;
+
+        calculateCalibrationValues(&results[1],min,max,avg);
+        avgMax[1] += max;
+        avgMin[1] += min;
+        avgAvg[1] += avg;
+    }
+
+    free(i2s_read_buff);
+    free(results);
+    for(int i = 0;i<2;++i) {
+        avgMax[i] /= iterations;
+        avgMin[i] /= iterations;
+        avgAvg[i] /= iterations;
+
+        DBG_SECT(
+            Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
+      )
+    }
 }
 
 void printBuffer(bufStruct *i2s_read_buff) {
@@ -346,11 +277,11 @@ void printBuffer(bufStruct *i2s_read_buff) {
     }
     Serial.println("------------------");
 }
+#endif
 
-void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]) {
-    outputChannels[0].count = 0;
-    outputChannels[1].count = 0;
-    for(size_t i=0;i<input->count;++i) {
+void splitBuffer(const bufStruct *input, size_t startInputIndex, bufStruct outputChannels[2]) {
+    
+    for(size_t i=startInputIndex;i<input->count;++i) {
         uint16_t value = input->buffer[i];
         int index = value>>14; // 12 bytes are the value, then shift 2 more to see if its 4 or 0
         outputChannels[index].buffer[outputChannels[index].count++] = value & 0xFFF;        
@@ -389,7 +320,12 @@ void denoiseBuffer_2(bufStruct *buff) {
 void calculateCurrent(bufStruct *currentBuf) 
 {
     double sum = 0.0;
-
+DBG_SECT(
+        double avgRaw = 0;
+        double avgAdj = 0;
+        static unsigned int counter = 0;
+        size_t start = millis();
+)
     uint16_t *buffer  = currentBuf->buffer;
     for (size_t i = 0; i <currentBuf->count; ++i, ++buffer)
     {
@@ -399,8 +335,8 @@ void calculateCurrent(bufStruct *currentBuf)
         double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
         //double val = value;
         if(val<0) val = 0;
-DBG_SECT(
-        avgRaw += val;    
+DBG_SECT (
+        avgRaw += val;
 )
 
         // We know that the voltage is between 0 and 3333mV
@@ -412,17 +348,19 @@ DBG_SECT(
         val = val * (MAX_A / ZERO_V) - MAX_A;
         #undef ZERO_V
         #undef MAX_A
-#if DEBUG
+DBG_SECT (
         avgAdj += val;
 )     
         sum += (val * val);
     }
-#if DEBUG
+DBG_SECT (
+    if(Debug.isActive(Debug.DEBUG)) {
     if(!counter) {
-        Serial.print("AvgRaw: "); Serial.print(avgRaw/count); Serial.print(" AvgAdj: "); Serial.println(avgAdj/count);
-        Serial.println("---------------");
+        Debug.printf("AvgRaw: %lf AvgAdj %lf\n",avgRaw/currentBuf->count,avgAdj/currentBuf->count); 
+        Debug.println("---------------");
     }
-#endif
+    }
+)
    
 
     if ( currentBuf->count)
@@ -437,15 +375,18 @@ DBG_SECT(
         oldCurrentValsPos = (oldCurrentValsPos+1) % ADC_AVERAGE_COUNT;
     }
 
-    #if DEBUG
-    if(!counter) {
-        unsigned long duration = millis()-start;
-        Serial.print("calc took "); Serial.println(duration);
-    }
-    
-    #endif
+    DBG_SECT(
+        if (Debug.isActive(Debug.DEBUG))
+        {
+            if (!counter)
+            {
+                Debug.printf("calc took %ld\n", millis() - start);
+            }
+        }
+        #define STEPWIDTH 100
+   	    counter = (counter +1 ) % STEPWIDTH;
+        )
 }
-
 
 void calculateVoltage(bufStruct *voltageBuf) 
 {
@@ -455,6 +396,9 @@ void calculateVoltage(bufStruct *voltageBuf)
     static double maxRaw = 0;
     static double minRaw = 4096.0;
     static int counter = 0;
+DBG_SECT(
+    unsigned long start = millis();
+)
     uint16_t *buffer  = voltageBuf->buffer;
     for (size_t i = 0; i <voltageBuf->count; ++i, ++buffer)
     {
@@ -463,11 +407,11 @@ void calculateVoltage(bufStruct *voltageBuf)
         double val = esp_adc_cal_raw_to_voltage(*buffer, adc_chars);
         //double val = *buffer;
         //if(val<0) val = 0;
-#if 1
+DBG_SECT (
         avgRaw += val;
         maxRaw = max(maxRaw,val);    
         minRaw = min(minRaw,val);    
-#endif
+)
 
         // We know that the voltage is between 0 and 3333mV
         // So 1666mV should be 0V In Fact 1.64mV gives us a reading of 1631
@@ -529,11 +473,6 @@ DBG_SECT(
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
 {
 
-    
-
-#if DEBUG
-    unsigned long start = millis();
-#endif 
 
     denoiseBuffer(currentBuf);
     denoiseBuffer(voltageBuf);

@@ -11,22 +11,17 @@ static unsigned long lastConnectionAttempt = 0;
 
 DBG_SECT (
 RemoteDebug Debug;
+extern bool doCalibration;
 
 void processCmdRemoteDebug() {
 
 	String lastCmd = Debug.getLastCommand();
 
-	if (lastCmd == "calibrateC") {
+	if (lastCmd == "calibrate") {
 		
 		debugA("Clibrating Current sensor");
-
-        debugA("Done");
-	} else if (lastCmd == "calibrateV") {
-
-		debugA("Clibrating Voltage sensor");
-
-        debugA("Done");
-	}
+		doCalibration = true;
+	} 
 }
 
 bool debugStart() {
@@ -41,8 +36,8 @@ void debugSetup() {
 	//Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
 	Debug.showColors(true); // Colors
 
-    String helpCmd = "calibrateC - Calibrate current\r\n";
-	helpCmd.concat("calibrateV - calibrate voltage");
+    String helpCmd = "calibrate - calculate calkibration values\r\n";
+
 
 	Debug.setHelpProjectsCmds(helpCmd);
 	Debug.setCallBackProjectCmds(&processCmdRemoteDebug);
