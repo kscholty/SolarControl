@@ -169,7 +169,7 @@ static bool handleRequest(uint8_t *request, size_t length)
     if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(bmsUpdateIntervalMilis - 100)) == pdTRUE)
     {
         while (Serial2.read() != -1);
-        if(Serial2.baudRate()) != BAUDRATE) {
+        if(Serial2.baudRate()!= BAUDRATE) {
             Serial.updateBaudRate(BAUDRATE);
         }
         Serial2.write(request, length);

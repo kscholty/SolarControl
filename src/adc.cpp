@@ -10,12 +10,12 @@
 
 #include "common.h"
 #include "debugManagement.h"
-
+#include "adc.h"
 
 //i2s number
 #define I2S_NUM           (I2S_NUM_0)
 //i2s sample rate
-#define I2S_SAMPLE_RATE   (40000)
+#define I2S_SAMPLE_RATE   (67000)
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
 //I2S read buffer length
@@ -36,9 +36,9 @@
 
 // How many old values do we want to use
 // to get a more stable reading
-#define ADC_AVERAGE_COUNT 8
+#define ADC_AVERAGE_COUNT 16
 
-#define SAMPLESIZE 2
+#define SAMPLESIZE 8
 
 
 typedef uint16_t buffer_t[SAMPLESIZE * READ_LEN / sizeof(int16_t)];
@@ -56,22 +56,31 @@ double adcGetVoltage();
 void denoiseBuffer(bufStruct *buff);
 void calibration(size_t);
 
-// The sum of suared values. Basis for 
-// calculation of root...
-ICACHE_RAM_ATTR static double  avgCurrentSquareSum = 0;
-ICACHE_RAM_ATTR static double  avgVoltageSquareSum = 0;
 
 static TaskHandle_t readTask = NULL;
 static xQueueHandle mutex;
 static xQueueHandle i2s_event_queue;
-ICACHE_RAM_ATTR static double oldCurrentVals[ADC_AVERAGE_COUNT];
-ICACHE_RAM_ATTR static double oldVoltageVals[ADC_AVERAGE_COUNT];
-int oldCurrentValsPos = 0;
-int oldVoltageValsPos = 0;
 
-DBG_SECT(
-bool doCalibration = false;
-)
+enum ValueType {
+    CURRENT = 0,
+    VOLTAGE = 1,
+    POWER = 2,
+    MaxValueType
+};
+
+
+// The sum of suared values. Basis for 
+// calculation of root...
+ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
+ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
+
+ICACHE_RAM_ATTR static double avgCalibration[2]={844,1646.5};
+ICACHE_RAM_ATTR static double maxCalibration[2]={345,335.0};
+static const double maxVals[2] = {6.66,325.0};
+
+int oldValsPos[MaxValueType] = {0,0,0};
+
+bool doCalibration = true;
 
 static volatile bool stopAdcUsage=false;
 esp_adc_cal_characteristics_t *adc_chars;
@@ -128,7 +137,7 @@ bool adcInit()
     // Length of the pattern table  (-1 obviously)
     SET_PERI_REG_BITS(SYSCON_SARADC_CTRL_REG, SYSCON_SARADC_SAR1_PATT_LEN, 1, SYSCON_SARADC_SAR1_PATT_LEN_S);
     // Channels 0 and 5 with 12db Attenuation and length of 12 bit
-    WRITE_PERI_REG(SYSCON_SARADC_SAR1_PATT_TAB1_REG,0x0F4F0000);
+    WRITE_PERI_REG(SYSCON_SARADC_SAR1_PATT_TAB1_REG,0x0F5F0000);
 
  // The raw ADC data is written in DMA in inverted form. This add an inversion:
     SET_PERI_REG_MASK(SYSCON_SARADC_CTRL2_REG, SYSCON_SARADC_SAR1_INV);
@@ -137,8 +146,8 @@ bool adcInit()
 
     //adcReadCalibrationData();
 
-    memset(oldCurrentVals,0,ADC_AVERAGE_COUNT*sizeof(*oldCurrentVals));
-    memset(oldVoltageVals,0,ADC_AVERAGE_COUNT*sizeof(*oldVoltageVals));
+    memset(oldVals,0,ADC_AVERAGE_COUNT*MaxValueType*sizeof(oldVals[0][0]));
+    
      xTaskCreate(readAdc, "ADC read", 4096, 0, 5, &readTask);
      return true;
 }
@@ -187,13 +196,14 @@ void readAdc(void *buffer)
     stopAdcUsage = false;
     while (!stopAdcUsage)
     {
-        DBG_SECT(
-            if (doCalibration)
-            {
-                calibration(100);
-            } else
-        )
+        if (doCalibration)
         {
+            calibration(1000);
+            doCalibration = false;
+        }
+        else
+        {
+
             results[0].count = 0;
             results[1].count = 0;
             readValues(i2s_read_buff, results);
@@ -212,7 +222,6 @@ void readAdc(void *buffer)
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
 
-#ifndef DEBUG_DISABLED
 bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average) {
 
     denoiseBuffer(values);
@@ -237,6 +246,8 @@ void calibration(size_t iterations = 100) {
     double avgMin[2] = {0,0};
     double avgAvg[2] = {0,0};
 
+    Serial1.println("Starting clibration");
+    Serial1.flush();
     bufStruct *i2s_read_buff = (bufStruct *)calloc(1, sizeof(bufStruct));
     bufStruct *results = (bufStruct *)calloc(2, sizeof(bufStruct));
     for(int i = 0; i<iterations;++i) {
@@ -259,30 +270,41 @@ void calibration(size_t iterations = 100) {
         avgMax[i] /= iterations;
         avgMin[i] /= iterations;
         avgAvg[i] /= iterations;
-
+        //avgCalibration[i] = avgAvg[i];
+        //maxCalibration[i] = (avgMax[i]-avgMin[i])/2.0;
         DBG_SECT(
             Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
       )
+        Serial.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
     }
+    Serial.println("----------");
 }
 
 void printBuffer(bufStruct *i2s_read_buff) {
     size_t count = i2s_read_buff->count ;
    
     Serial.printf("Read: %d values\n",count);
-    for(int i=0;i<count;++i) {
+    for(int i=0;i<count;i+=2) {
         uint16_t value = i2s_read_buff->buffer[i];
-        double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
-        Serial.printf("%d : %x : %.3f\n",value, value, val);       
+       double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
+        //double val = value;
+        Serial.printf("%.3f\n\r",val);               
     }
+    /*
+    Serial.println("1500.0");
+Serial.println("1500.0");
+Serial.println("1500.0");
+Serial.println("1500.0");
+*/
     Serial.println("------------------");
 }
-#endif
+
 
 void splitBuffer(const bufStruct *input, size_t startInputIndex, bufStruct outputChannels[2]) {
     
     for(size_t i=startInputIndex;i<input->count;++i) {
         uint16_t value = input->buffer[i];
+        //Serial.printf("%d: %x : %x\r\n", i,value>>12,value & 0xFFF);
         int index = value>>14; // 12 bytes are the value, then shift 2 more to see if its 4 or 0
         outputChannels[index].buffer[outputChannels[index].count++] = value & 0xFFF;        
     }
@@ -317,187 +339,112 @@ void denoiseBuffer_2(bufStruct *buff) {
     buff->count = count;
 }
 
-void calculateCurrent(bufStruct *currentBuf) 
+double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
 {
     double sum = 0.0;
-DBG_SECT(
-        double avgRaw = 0;
-        double avgAdj = 0;
-        static unsigned int counter = 0;
-        size_t start = millis();
-)
-    uint16_t *buffer  = currentBuf->buffer;
-    for (size_t i = 0; i <currentBuf->count; ++i, ++buffer)
+    static size_t count = 0;
+    uint16_t *buffer = aBuf->buffer;
+    double zeroValue = avgCalibration[calibrationValueIndex];
+    double maxValue = maxCalibration[calibrationValueIndex];
+    double maxTargetValue = maxVals[calibrationValueIndex];
+    double avgVal = 0.0;
+    for (size_t i = 0; i < aBuf->count; ++i, ++buffer)
     {
-        //uint32_t value = adcCalibrateValue(*buffer);
-        uint32_t value = *buffer;
         // Get voltage
-        double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
-        //double val = value;
-        if(val<0) val = 0;
-DBG_SECT (
-        avgRaw += val;
-)
+        double val = esp_adc_cal_raw_to_voltage(*buffer, adc_chars);
+        if (val < 0) val = 0;
 
-        // We know that the voltage is between 0 and 3333mV
-        // So 1666mV should be 0A In Fact 1.64mV gives us a reading of 1631
-        // We can assume 1631 == 0A. So
-        // (val-1631)/1631*10
-        #define ZERO_V 1631
-        #define MAX_A 6.66
-        val = val * (MAX_A / ZERO_V) - MAX_A;
-        #undef ZERO_V
-        #undef MAX_A
-DBG_SECT (
-        avgAdj += val;
-)     
+        //Project measuerd value into taregt value
+        val = (val - zeroValue) / maxValue * maxTargetValue;
+        avgVal += val;
         sum += (val * val);
     }
-DBG_SECT (
-    if(Debug.isActive(Debug.DEBUG)) {
-    if(!counter) {
-        Debug.printf("AvgRaw: %lf AvgAdj %lf\n",avgRaw/currentBuf->count,avgAdj/currentBuf->count); 
-        Debug.println("---------------");
-    }
-    }
-)
-   
-
-    if ( currentBuf->count)
+    if (aBuf->count)
     {
-                
-        sum = sum / (currentBuf->count*ADC_AVERAGE_COUNT);
-
-        xSemaphoreTake(mutex, portMAX_DELAY);
-        avgCurrentSquareSum = avgCurrentSquareSum - oldCurrentVals[oldCurrentValsPos] + sum;
-        xSemaphoreGive(mutex);
-        oldCurrentVals[oldCurrentValsPos] = sum;
-        oldCurrentValsPos = (oldCurrentValsPos+1) % ADC_AVERAGE_COUNT;
+        sum = sum / (aBuf->count * ADC_AVERAGE_COUNT);
     }
+    #if 0
+    if(count % 101 == 0) {
+        Serial.printf("AvgSumVal(%d) = %.3f\r\n",calibrationValueIndex,avgVal / aBuf->count);
+    }
+    count++;
+    #endif
+    avgValueSquareSum[calibrationValueIndex] = avgValueSquareSum[calibrationValueIndex] - oldVals[oldValsPos[calibrationValueIndex]][calibrationValueIndex] + sum;
+    oldVals[oldValsPos[calibrationValueIndex]][calibrationValueIndex] = sum;
+    oldValsPos[calibrationValueIndex] = (oldValsPos[calibrationValueIndex] + 1) % ADC_AVERAGE_COUNT;
 
-    DBG_SECT(
-        if (Debug.isActive(Debug.DEBUG))
-        {
-            if (!counter)
-            {
-                Debug.printf("calc took %ld\n", millis() - start);
-            }
-        }
-        #define STEPWIDTH 100
-   	    counter = (counter +1 ) % STEPWIDTH;
-        )
+    return avgValueSquareSum[calibrationValueIndex];
 }
+
+void calculateCurrent(bufStruct *currentBuf) 
+{
+        calculateQuadrMean(currentBuf,CURRENT);       
+}      
 
 void calculateVoltage(bufStruct *voltageBuf) 
 {
-    double sum = 0.0;
-    static double avgRaw = 0;
-    static double avgAdj = 0;
-    static double maxRaw = 0;
-    static double minRaw = 4096.0;
-    static int counter = 0;
-DBG_SECT(
-    unsigned long start = millis();
-)
-    uint16_t *buffer  = voltageBuf->buffer;
-    for (size_t i = 0; i <voltageBuf->count; ++i, ++buffer)
-    {
-        //uint32_t value = adcCalibrateValue(*buffer);        
-        // Get voltage
-        double val = esp_adc_cal_raw_to_voltage(*buffer, adc_chars);
-        //double val = *buffer;
-        //if(val<0) val = 0;
-DBG_SECT (
-        avgRaw += val;
-        maxRaw = max(maxRaw,val);    
-        minRaw = min(minRaw,val);    
-)
+     calculateQuadrMean(voltageBuf,VOLTAGE);        
 
-        // We know that the voltage is between 0 and 3333mV
-        // So 1666mV should be 0V In Fact 1.64mV gives us a reading of 1631
-        // We can assume 1631 == 0V. So
-        // (val-1631)/1631*MAXV
-        #define ZERO_V 1641.25
-        #define MAX_VAL 406.0
-        #define MAX_V 325.0
-        
-        val = (val-ZERO_V)/MAX_VAL * MAX_V;
+}
 
-        //val = val * (MAX_V / ZERO_V) - MAX_V;
-        #undef ZERO_V
-        #undef MAX_V
-#if 1
-        avgAdj += val;
-#endif        
-        sum += (val * val);
+
+void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
+
+    size_t count = min(currentBuf->count,voltageBuf->count);
+    float sumPower=0.0;
+    for(size_t i = 0; i< count;++i) {
+        sumPower += currentBuf->buffer[i]*voltageBuf->buffer[i];
     }
-#if 1
-    #define STEPWIDTH 100
-   	counter = (counter +1 ) % STEPWIDTH;
-    if(!counter) {
-        Serial.print("AvgRaw: "); Serial.print(avgRaw/(STEPWIDTH*voltageBuf->count)); Serial.print(" AvgAdj: "); Serial.println(avgAdj/(STEPWIDTH*voltageBuf->count));
-        Serial.print("MinRaw: "); Serial.print(minRaw); Serial.print(" MaxRaw: "); Serial.println(maxRaw);
-        minRaw = maxRaw; maxRaw = 0;
-        avgRaw = 0; avgAdj = 0;
-        Serial.println("---------------");
-    }
-#endif
-   
 
-    if ( voltageBuf->count)
+
+    sumPower /= count;
+
+     if ( currentBuf->count)
     {
                 
-        sum = sum / (voltageBuf->count*ADC_AVERAGE_COUNT);
+        sumPower = sumPower / (count*ADC_AVERAGE_COUNT);
 
-        xSemaphoreTake(mutex, portMAX_DELAY);
-        avgVoltageSquareSum = avgVoltageSquareSum - oldVoltageVals[oldVoltageValsPos] + sum;
-        xSemaphoreGive(mutex);
-        oldVoltageVals[oldVoltageValsPos] = sum;
-        oldVoltageValsPos = (oldVoltageValsPos+1) % ADC_AVERAGE_COUNT;
-    }
-    static double avgVoltage =0.0;
-    if(!counter) {
-        Serial.print("Voltage "); Serial.println(avgVoltage/STEPWIDTH);
-        avgVoltage = adcGetVoltage() ;
-    } else {
-        avgVoltage += adcGetVoltage();
-    }
-
-DBG_SECT(
-    if(!counter) {        
-        DEBUG_D("calc took %ld", millis()-start);
-    }
-)
+        avgValueSquareSum[POWER] = avgValueSquareSum[POWER] - oldVals[oldValsPos[POWER]][POWER] + sumPower;
+        
+        oldVals[oldValsPos[POWER]][POWER] = sumPower;
+        oldValsPos[POWER] = (oldValsPos[POWER]+1) % ADC_AVERAGE_COUNT;
+    } 
 }
 
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
 {
 
+    static int count=0;
 
     denoiseBuffer(currentBuf);
+    calculateCurrent(currentBuf);
     denoiseBuffer(voltageBuf);
-
-    //printBuffer(voltageBuf);
-    //printBuffer(currentBuf);
-    //delay(3000);
     calculateVoltage(voltageBuf);
+
+    DBG_SECT(
+    if(count % 100 == 0) {
+        Serial.printf("Current is: %.3f\r\n",adcGetCurrent());
+        Serial.printf("Voltage is: %.3f\r\n",adcGetVoltage());
+    }
+    count++;
+    )
     return;
 }
 
 
 double adcGetVoltage()
 {
-    xSemaphoreTake(mutex, portMAX_DELAY);
-    double val = avgVoltageSquareSum;
-    xSemaphoreGive(mutex);   
+    //xSemaphoreTake(mutex, portMAX_DELAY);
+    double val = avgValueSquareSum[VOLTAGE];
+    //xSemaphoreGive(mutex);   
     return sqrt(val);
 }
 
 double adcGetCurrent()
 {
-    xSemaphoreTake(mutex, portMAX_DELAY);
-    double val = avgCurrentSquareSum;
-    xSemaphoreGive(mutex);   
+    //xSemaphoreTake(mutex, portMAX_DELAY);
+    double val = avgValueSquareSum[CURRENT];
+    //xSemaphoreGive(mutex);   
     return sqrt(val);
 }
 
