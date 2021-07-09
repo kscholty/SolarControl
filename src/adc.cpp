@@ -38,7 +38,7 @@
 // to get a more stable reading
 #define ADC_AVERAGE_COUNT 16
 
-#define SAMPLESIZE 8
+#define SAMPLESIZE 2
 
 
 typedef uint16_t buffer_t[SAMPLESIZE * READ_LEN / sizeof(int16_t)];
@@ -74,7 +74,7 @@ enum ValueType {
 ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
-ICACHE_RAM_ATTR static double avgCalibration[2]={844,1646.5};
+ICACHE_RAM_ATTR static double avgCalibration[2]={1631,1646.5};
 ICACHE_RAM_ATTR static double maxCalibration[2]={345,335.0};
 static const double maxVals[2] = {6.66,325.0};
 
@@ -273,7 +273,7 @@ void calibration(size_t iterations = 100) {
         //avgCalibration[i] = avgAvg[i];
         //maxCalibration[i] = (avgMax[i]-avgMin[i])/2.0;
         DBG_SECT(
-            Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
+            Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
       )
         Serial.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
     }
@@ -342,7 +342,7 @@ void denoiseBuffer_2(bufStruct *buff) {
 double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
 {
     double sum = 0.0;
-    static size_t count = 0;
+    
     uint16_t *buffer = aBuf->buffer;
     double zeroValue = avgCalibration[calibrationValueIndex];
     double maxValue = maxCalibration[calibrationValueIndex];
@@ -364,6 +364,7 @@ double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
         sum = sum / (aBuf->count * ADC_AVERAGE_COUNT);
     }
     #if 0
+    static size_t count = 0;
     if(count % 101 == 0) {
         Serial.printf("AvgSumVal(%d) = %.3f\r\n",calibrationValueIndex,avgVal / aBuf->count);
     }
@@ -417,10 +418,10 @@ void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
     static int count=0;
 
     denoiseBuffer(currentBuf);
-    calculateCurrent(currentBuf);
+    //calculateCurrent(currentBuf);
     denoiseBuffer(voltageBuf);
-    calculateVoltage(voltageBuf);
-
+    //calculateVoltage(voltageBuf);
+    calculatePower(currentBuf,voltageBuf);
     DBG_SECT(
     if(count % 100 == 0) {
         Serial.printf("Current is: %.3f\r\n",adcGetCurrent());
@@ -448,6 +449,9 @@ double adcGetCurrent()
     return sqrt(val);
 }
 
+double adcGetPower() {
+     return avgValueSquareSum[POWER];
+}
 
 void adcStop() {
     Serial.print(" Stopping adc task ");
