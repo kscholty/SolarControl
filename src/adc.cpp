@@ -51,7 +51,7 @@ struct bufStruct {
 IRAM_ATTR void readAdc(void *);
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf);
 void printBuffer(bufStruct *);
-void splitBuffer(const bufStruct *input, size_t startInputIndex, bufStruct outputChannels[2]);
+void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]);
 double adcGetVoltage();
 void denoiseBuffer(bufStruct *buff);
 void calibration(size_t);
@@ -74,13 +74,13 @@ enum ValueType {
 ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
-static const uint32_t avgCalibration[2]={1632,1601};
-static const uint32_t maxCalibration[2]={1513,410};
+static const int32_t avgCalibration[2]={1632,1670};
+static const int32_t maxCalibration[2]={1513,427};
 static const double maxVals[2] = {6.66,325.0};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
-bool doCalibration = false;
+bool doCalibration = true;
 
 static volatile bool stopAdcUsage=false;
 esp_adc_cal_characteristics_t *adc_chars;
@@ -157,7 +157,6 @@ void readValues(bufStruct *recBuffer, bufStruct *results)
     system_event_t evt;
     uint16_t *buffer = recBuffer->buffer;
     size_t read = 0;
-    size_t oldCount;
     recBuffer->count = 0;
     for (int i = 0; i < SAMPLESIZE; ++i)
     {
@@ -167,11 +166,9 @@ void readValues(bufStruct *recBuffer, bufStruct *results)
             {
                 {
                     //read data from I2S bus, in this case, from ADC.
-                    i2s_read(I2S_NUM, buffer, READ_LEN, &read, 0);
-                    oldCount = recBuffer->count;
-                    recBuffer->count += read / sizeof(uint16_t);   
-                    splitBuffer(recBuffer, oldCount,  results);     
-                    buffer = recBuffer->buffer + recBuffer->count;            
+                    i2s_read(I2S_NUM, buffer, READ_LEN, &read, 0);                    
+                    recBuffer->count = read / sizeof(uint16_t);   
+                    splitBuffer(recBuffer,  results);                         
                 }
             }            
         }
@@ -204,12 +201,11 @@ void readAdc(void *buffer)
         else
         {
 
-            results[0].count = 0;
-            results[1].count = 0;
-            readValues(i2s_read_buff, results);
-            //splitBuffer(i2s_read_buff, 0,  results);
+            results[CURRENT].count = 0;
+            results[VOLTAGE].count = 0;
+            readValues(i2s_read_buff, results);  
             //printBuffer(i2s_read_buff);
-            calculate(&results[0], &results[1]);
+            calculate(&results[CURRENT], &results[VOLTAGE]);
         }
     }
 
@@ -222,7 +218,7 @@ void readAdc(void *buffer)
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
 
-bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average, uint32_t & offset) {
+bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average, int32_t & offset) {
 
     denoiseBuffer(values);
     maxV = 0; 
@@ -237,6 +233,8 @@ bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, d
     for(size_t i = 0;i<values->count;++i) {
         uint16_t value = values->buffer[i];
         double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
+        //double val = value;
+
         maxV = max (maxV,val);
         minV = min(minV,val);       
         average += val;
@@ -253,7 +251,7 @@ void calibration(size_t iterations = 100) {
     double avgMax[2] = {0,0};
     double avgMin[2] = {0,0};
     double avgAvg[2] = {0,0};
-    uint32_t offsets[2] = {avgCalibration[0],avgCalibration[1]};
+    int32_t offsets[2] = {avgCalibration[0],avgCalibration[1]};
 
     Serial1.println("Starting clibration");
     Serial1.flush();
@@ -310,12 +308,12 @@ Serial.println("1500.0");
 }
 
 
-void splitBuffer(const bufStruct *input, size_t startInputIndex, bufStruct outputChannels[2]) {
+void splitBuffer(const bufStruct *input, bufStruct outputChannels[2]) {
     
-    for(size_t i=startInputIndex;i<input->count;++i) {
+    for(size_t i=0;i<input->count;++i) {
         uint16_t value = input->buffer[i];
         //Serial.printf("%d: %x : %x\r\n", i,value>>12,value & 0xFFF);
-        int index = value>>14; // 12 bytes are the value, then shift 2 more to see if its 4 or 0
+        int index = (value>>14)&0xf; // 12 bytes are the value, then shift 2 more to see if its 5 or 0
         outputChannels[index].buffer[outputChannels[index].count++] = value & 0xFFF;        
     }
 
@@ -330,8 +328,8 @@ void denoiseBuffer(bufStruct *buff) {
     {
         // Reduce noise
         size_t index = i << 2;
-        buff->buffer[i] = ((float)buff->buffer[index] + (float)buff->buffer[index + 1] + 
-                           (float)buff->buffer[index + 2] + (float)buff->buffer[index + 3]) / 4.0f + 0.5f;
+        buff->buffer[i] = ((uint32_t)buff->buffer[index] + (uint32_t)buff->buffer[index + 1] + 
+                           (uint32_t)buff->buffer[index + 2] + (uint32_t)buff->buffer[index + 3]) >> 2 ;
     }
     buff->count = count;
 }
@@ -354,20 +352,23 @@ double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
     double sum = 0.0;
     
     uint16_t *buffer = aBuf->buffer;
-    double zeroValue = avgCalibration[calibrationValueIndex];
-    double maxValue = maxCalibration[calibrationValueIndex];
-    double maxTargetValue = maxVals[calibrationValueIndex];
-    double avgVal = 0.0;
+    const int32_t zeroValue = avgCalibration[calibrationValueIndex];
+    const int32_t maxValue = maxCalibration[calibrationValueIndex];
+    const double maxTargetValue = maxVals[calibrationValueIndex];
+   // double avgVal=0.0;
     for (size_t i = 0; i < aBuf->count; ++i, ++buffer)
     {
         // Get voltage
-        double val = esp_adc_cal_raw_to_voltage(*buffer, adc_chars);
-        if (val < 0) val = 0;
+        //Serial.printf("%d\r\n",(int)*buffer);
+        int32_t val = esp_adc_cal_raw_to_voltage(*buffer, adc_chars);
+        //int32_t val = *buffer;
+        
 
         //Project measuerd value into taregt value
-        val = (val - zeroValue) / maxValue * maxTargetValue;
-        avgVal += val;
+        val = (val - zeroValue)  * maxTargetValue / maxValue;   
+       // avgVal += val;
         sum += (val * val);
+        //Serial.printf("%f\r\n",val);
     }
     if (aBuf->count)
     {
@@ -411,14 +412,11 @@ void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
         double valVoltage = esp_adc_cal_raw_to_voltage(voltageBuf->buffer[i], adc_chars);
 
         //Project measuerd value into taregt value
-        valCurrent = (valCurrent - avgCalibration[CURRENT]) / maxCalibration[CURRENT] * maxVals[CURRENT];
-        valVoltage = (valVoltage - avgCalibration[VOLTAGE]) / maxCalibration[VOLTAGE] * maxVals[VOLTAGE];
+        valCurrent = (valCurrent - avgCalibration[CURRENT]) * maxVals[CURRENT] / maxCalibration[CURRENT];
+        valVoltage = (valVoltage - avgCalibration[VOLTAGE]) * maxVals[VOLTAGE] / maxCalibration[VOLTAGE] ;
 
         sumPower += valCurrent*valVoltage;
     }
-
-
-    
 
      if (count)
     {        
@@ -434,19 +432,23 @@ void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
 {
 
-    static int count=0;
+  
 
     denoiseBuffer(currentBuf);
     //calculateCurrent(currentBuf);
     denoiseBuffer(voltageBuf);
     //calculateVoltage(voltageBuf);
     calculatePower(currentBuf,voltageBuf);
-#if 0
+#if 1
     DBG_SECT(
+    static int count=0;
     if(count % 1000 == 0) {
-        Debug.printf("Current is: %.3f\r\n",adcGetCurrent());
-        Debug.printf("Voltage is: %.3f\r\n",adcGetVoltage());
+        //Debug.printf("Current is: %.3f\r\n",adcGetCurrent());
+        //Debug.printf("Voltage is: %.3f\r\n",adcGetVoltage());
         Debug.printf("Power is: %.3f (%.3f)\r\n",adcGetPower(),adcGetCurrent()*adcGetVoltage());
+        //Serial.printf("Voltage is: %.3f\r\n",adcGetVoltage());
+        //Serial.printf("Serial is: %.3f\r\n",adcGetCurrent());
+
     }
     count++;
     )
@@ -472,7 +474,7 @@ double adcGetCurrent()
 }
 
 double adcGetPower() {
-     return avgValueSquareSum[POWER]*1.1;
+     return avgValueSquareSum[POWER];
 }
 
 void adcStop() {
