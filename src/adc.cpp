@@ -15,7 +15,7 @@
 //i2s number
 #define I2S_NUM           (I2S_NUM_0)
 //i2s sample rate
-#define I2S_SAMPLE_RATE   (67000)
+#define I2S_SAMPLE_RATE   (64000)
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
 //I2S read buffer length
@@ -74,13 +74,13 @@ enum ValueType {
 ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
-ICACHE_RAM_ATTR static double avgCalibration[2]={1631,1646.5};
-ICACHE_RAM_ATTR static double maxCalibration[2]={345,335.0};
+static const uint32_t avgCalibration[2]={1632,1601};
+static const uint32_t maxCalibration[2]={1513,410};
 static const double maxVals[2] = {6.66,325.0};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
-bool doCalibration = true;
+bool doCalibration = false;
 
 static volatile bool stopAdcUsage=false;
 esp_adc_cal_characteristics_t *adc_chars;
@@ -189,7 +189,7 @@ void readAdc(void *buffer)
 
     // ADC-I2S Scanning does not normal start (more badly) after the reset of ESP32.
     // It is necessary to add a delay of at least 5 seconds before switching on the ADC for a reliable start, this is issue.
-    vTaskDelay(5000 / portTICK_RATE_MS);
+    vTaskDelay(7000 / portTICK_RATE_MS);
 
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
@@ -198,7 +198,7 @@ void readAdc(void *buffer)
     {
         if (doCalibration)
         {
-            calibration(1000);
+            calibration(3000);
             doCalibration = false;
         }
         else
@@ -222,19 +222,27 @@ void readAdc(void *buffer)
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
 
-bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average) {
+bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average, uint32_t & offset) {
 
     denoiseBuffer(values);
     maxV = 0; 
     minV = 4096;
     average = 0;
-    
+
+    #define FILTERSHIFT 13     // for low pass filters to determine ADC offsets
+    #define FILTERROUNDING (1<<12)
+
+    unsigned long fOffset = (unsigned long)offset << FILTERSHIFT;
+
     for(size_t i = 0;i<values->count;++i) {
         uint16_t value = values->buffer[i];
         double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
         maxV = max (maxV,val);
         minV = min(minV,val);       
         average += val;
+        val = val - offset;
+        fOffset += val;
+        offset = (uint32_t) ((fOffset+FILTERROUNDING)>>FILTERSHIFT);
     }
     average /= values->count;    
     return true;
@@ -245,6 +253,7 @@ void calibration(size_t iterations = 100) {
     double avgMax[2] = {0,0};
     double avgMin[2] = {0,0};
     double avgAvg[2] = {0,0};
+    uint32_t offsets[2] = {avgCalibration[0],avgCalibration[1]};
 
     Serial1.println("Starting clibration");
     Serial1.flush();
@@ -252,16 +261,17 @@ void calibration(size_t iterations = 100) {
     bufStruct *results = (bufStruct *)calloc(2, sizeof(bufStruct));
     for(int i = 0; i<iterations;++i) {
         double min,max,avg;
+       
         readValues(i2s_read_buff, results);        
-        calculateCalibrationValues(&results[0],min,max,avg);
-        avgMax[0] += max;
-        avgMin[0] += min;
-        avgAvg[0] += avg;
+        calculateCalibrationValues(&results[CURRENT],min,max,avg,offsets[CURRENT]);
+        avgMax[CURRENT] += max;
+        avgMin[CURRENT] += min;
+        avgAvg[CURRENT] += avg;
 
-        calculateCalibrationValues(&results[1],min,max,avg);
-        avgMax[1] += max;
-        avgMin[1] += min;
-        avgAvg[1] += avg;
+        calculateCalibrationValues(&results[VOLTAGE],min,max,avg,offsets[VOLTAGE]);      
+        avgMax[VOLTAGE] += max;
+        avgMin[VOLTAGE] += min;
+        avgAvg[VOLTAGE] += avg;
     }
 
     free(i2s_read_buff);
@@ -273,9 +283,9 @@ void calibration(size_t iterations = 100) {
         //avgCalibration[i] = avgAvg[i];
         //maxCalibration[i] = (avgMax[i]-avgMin[i])/2.0;
         DBG_SECT(
-            Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
+            Debug.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f offset %d\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2,offsets[i]);
       )
-        Serial.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2);
+        Serial.printf("Min: %.3f, Max: %.3f, avg: %.3f, range %.3f, median: %.3f offset %d\n\r", avgMin[i], avgMax[i], avgAvg[i], avgMax[i]-avgMin[i], (avgMax[i]-avgMin[i])/2,offsets[i]);
     }
     Serial.println("----------");
 }
@@ -392,18 +402,27 @@ void calculateVoltage(bufStruct *voltageBuf)
 void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
 
     size_t count = min(currentBuf->count,voltageBuf->count);
-    float sumPower=0.0;
-    for(size_t i = 0; i< count;++i) {
-        sumPower += currentBuf->buffer[i]*voltageBuf->buffer[i];
+    double sumPower=0.0;
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        // Get voltage
+        double valCurrent = esp_adc_cal_raw_to_voltage(currentBuf->buffer[i], adc_chars);
+        double valVoltage = esp_adc_cal_raw_to_voltage(voltageBuf->buffer[i], adc_chars);
+
+        //Project measuerd value into taregt value
+        valCurrent = (valCurrent - avgCalibration[CURRENT]) / maxCalibration[CURRENT] * maxVals[CURRENT];
+        valVoltage = (valVoltage - avgCalibration[VOLTAGE]) / maxCalibration[VOLTAGE] * maxVals[VOLTAGE];
+
+        sumPower += valCurrent*valVoltage;
     }
 
 
-    sumPower /= count;
+    
 
-     if ( currentBuf->count)
-    {
-                
-        sumPower = sumPower / (count*ADC_AVERAGE_COUNT);
+     if (count)
+    {        
+        sumPower = sumPower / ((double)count*(double)ADC_AVERAGE_COUNT);
 
         avgValueSquareSum[POWER] = avgValueSquareSum[POWER] - oldVals[oldValsPos[POWER]][POWER] + sumPower;
         
@@ -422,13 +441,16 @@ void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
     denoiseBuffer(voltageBuf);
     //calculateVoltage(voltageBuf);
     calculatePower(currentBuf,voltageBuf);
+#if 0
     DBG_SECT(
-    if(count % 100 == 0) {
-        Serial.printf("Current is: %.3f\r\n",adcGetCurrent());
-        Serial.printf("Voltage is: %.3f\r\n",adcGetVoltage());
+    if(count % 1000 == 0) {
+        Debug.printf("Current is: %.3f\r\n",adcGetCurrent());
+        Debug.printf("Voltage is: %.3f\r\n",adcGetVoltage());
+        Debug.printf("Power is: %.3f (%.3f)\r\n",adcGetPower(),adcGetCurrent()*adcGetVoltage());
     }
     count++;
     )
+#endif
     return;
 }
 
@@ -450,7 +472,7 @@ double adcGetCurrent()
 }
 
 double adcGetPower() {
-     return avgValueSquareSum[POWER];
+     return avgValueSquareSum[POWER]*1.1;
 }
 
 void adcStop() {
