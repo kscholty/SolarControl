@@ -334,20 +334,8 @@ void denoiseBuffer(bufStruct *buff) {
     buff->count = count;
 }
 
-void denoiseBuffer_2(bufStruct *buff) {
-    
-    size_t count = buff->count;
-     count = count >> 1; // Calculate average of 4 measurements
-    for (size_t i = 0; i < count; ++i)
-    {
-        // Reduce noise
-        size_t index = i << 1;
-        buff->buffer[i] = ((float)buff->buffer[index] + (float)buff->buffer[index + 1] ) / 2.0f + 0.5f;
-    }
-    buff->count = count;
-}
 
-double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
+double calculateSquareMean(bufStruct *aBuf, ValueType calibrationValueIndex)
 {
     double sum = 0.0;
     
@@ -390,37 +378,45 @@ double calculateQuadrMean(bufStruct *aBuf, ValueType calibrationValueIndex)
 
 void calculateCurrent(bufStruct *currentBuf) 
 {
-        calculateQuadrMean(currentBuf,CURRENT);       
+        calculateSquareMean(currentBuf,CURRENT);       
 }      
 
 void calculateVoltage(bufStruct *voltageBuf) 
 {
-     calculateQuadrMean(voltageBuf,VOLTAGE);        
+     calculateSquareMean(voltageBuf,VOLTAGE);        
 
 }
 
+// We are calculating the constant portion of the sum we want to calculate
+// The factor 16 is to enhance precision when we do the divion. This will be removed at the end.
+static const double CStar = maxVals[CURRENT]*maxVals[VOLTAGE] / (maxCalibration[CURRENT] * maxCalibration[VOLTAGE]);
+static const double CStarDash =  maxVals[CURRENT]*maxVals[VOLTAGE] / (maxCalibration[CURRENT] * maxCalibration[VOLTAGE]) * avgCalibration[CURRENT] * avgCalibration[VOLTAGE] ;
 
 void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
 
     size_t count = min(currentBuf->count,voltageBuf->count);
-    double sumPower=0.0;
+    int32_t sumPower=0;
 
     for (size_t i = 0; i < count; ++i)
     {
         // Get voltage
-        double valCurrent = esp_adc_cal_raw_to_voltage(currentBuf->buffer[i], adc_chars);
-        double valVoltage = esp_adc_cal_raw_to_voltage(voltageBuf->buffer[i], adc_chars);
+        int32_t valCurrent = esp_adc_cal_raw_to_voltage(currentBuf->buffer[i], adc_chars);
+        int32_t valVoltage = esp_adc_cal_raw_to_voltage(voltageBuf->buffer[i], adc_chars);
 
         //Project measuerd value into taregt value
-        valCurrent = (valCurrent - avgCalibration[CURRENT]) * maxVals[CURRENT] / maxCalibration[CURRENT];
-        valVoltage = (valVoltage - avgCalibration[VOLTAGE]) * maxVals[VOLTAGE] / maxCalibration[VOLTAGE] ;
+        //valCurrent = (valCurrent - avgCalibration[CURRENT]) * maxVals[CURRENT] / maxCalibration[CURRENT];
+        //valVoltage = (valVoltage - avgCalibration[VOLTAGE]) * maxVals[VOLTAGE] / maxCalibration[VOLTAGE] ;
+        //sumPower += valCurrent*valVoltage;
 
-        sumPower += valCurrent*valVoltage;
+        sumPower += valCurrent*valVoltage-valCurrent*avgCalibration[VOLTAGE]-valVoltage*avgCalibration[CURRENT];         
     }
 
      if (count)
     {        
-        sumPower = sumPower / ((double)count*(double)ADC_AVERAGE_COUNT);
+        //sumPower = sumPower / ((double)count*(double)ADC_AVERAGE_COUNT);
+        sumPower = ((CStar*sumPower / count + CStarDash) / ADC_AVERAGE_COUNT);
+        //sumPower = sumPower / ADC_AVERAGE_COUNT;
+        //sumPower = sumPower / 16; // Remove factor 16 we used above for precision.
 
         avgValueSquareSum[POWER] = avgValueSquareSum[POWER] - oldVals[oldValsPos[POWER]][POWER] + sumPower;
         
@@ -432,20 +428,18 @@ void calculatePower(bufStruct *currentBuf, bufStruct *voltageBuf) {
 void calculate(bufStruct *currentBuf, bufStruct *voltageBuf)
 {
 
-  
-
     denoiseBuffer(currentBuf);
     //calculateCurrent(currentBuf);
     denoiseBuffer(voltageBuf);
     //calculateVoltage(voltageBuf);
     calculatePower(currentBuf,voltageBuf);
-#if 1
+#if 0
     DBG_SECT(
     static int count=0;
     if(count % 1000 == 0) {
         //Debug.printf("Current is: %.3f\r\n",adcGetCurrent());
         //Debug.printf("Voltage is: %.3f\r\n",adcGetVoltage());
-        Debug.printf("Power is: %.3f (%.3f)\r\n",adcGetPower(),adcGetCurrent()*adcGetVoltage());
+        //Debug.printf("Power is: %.3f (%.3f)\r\n",adcGetPower(),adcGetCurrent()*adcGetVoltage());
         //Serial.printf("Voltage is: %.3f\r\n",adcGetVoltage());
         //Serial.printf("Serial is: %.3f\r\n",adcGetCurrent());
 

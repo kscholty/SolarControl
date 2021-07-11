@@ -236,6 +236,19 @@ void updateController(uint index)
         gChargerValuesChanged[index] = result;
 }
 
+int calculateInstantPower()
+{
+    unsigned int result = 0;
+    for (int i = 0; i < NUM_CHARGERS; ++i)
+    {
+        if (chargerIsValid(i))
+        {
+            result += chargerValues[i][BATTERY_CHARGE_POWER];
+        }
+    }
+    return (int)result / 100;
+}
+
 void chargeControllerThradFunc(void *)
 {
         if (gChargerNumValidChargers == 0)
@@ -260,6 +273,7 @@ DBG_SECT(
                                 updateController(i);
                         }
                 }
+                gCurrentPowerCreated = calculateInstantPower();
                 if (gExcessTaskId)
                 {
                         // Let's re-calculate the excess values...

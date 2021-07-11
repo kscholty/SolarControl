@@ -22,25 +22,13 @@ int gExcessTarget = 0.0;
 TaskHandle_t gExcessTaskId = 0;
 int gCurrentPowerCreated = 0;
 
-int calculateInstantPower()
-{
-    unsigned int result = 0;
-    for (int i = 0; i < NUM_CHARGERS; ++i)
-    {
-        if (chargerIsValid(i))
-        {
-            result += chargerValues[i][BATTERY_CHARGE_POWER];
-        }
-    }
-    return (int)result / 100;
-}
 
 void excessManagementLoop(void *)
 {
-    // Wait some time to give the system time to reach a good state.
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    // Wait for the first notification.
+    ulTaskNotifyTake(0, portMAX_DELAY);
 
-    int lastPowerCreated = calculateInstantPower();
+    int lastPowerCreated = gCurrentPowerCreated;
     int diffPower;
     bool reset = false;
     int laststep = EXCESSSTEP;
@@ -49,8 +37,7 @@ void excessManagementLoop(void *)
     while (1)
     {
         ulTaskNotifyTake(0, portMAX_DELAY);
-
-        gCurrentPowerCreated = calculateInstantPower();
+        
         if (gCurrentPowerCreated < gInverterTarget)
         {
             // PV creates even less than required...
