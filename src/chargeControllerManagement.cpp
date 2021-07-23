@@ -60,6 +60,12 @@ bool chargerReadPvAndBattery(uint index)
         {
                 uint8_t result;
                 uint count = 0;
+                
+                if (Serial2.baudRate() != BAUDRATE)
+                {
+                        Serial2.updateBaudRate(BAUDRATE);
+                }
+
                 do
                 {
                         result = charger[index].readInputRegisters(0x3100, 8);
@@ -114,7 +120,7 @@ DBG_SECT(
                                 DEBUG_E("Reading charger PV/Bat failed with %x\n", result);
                                 vTaskDelay(pdMS_TO_TICKS(200));
                         }
-                } while (!returnVal  && ++count < 3);
+                } while (!returnVal && ++count < 3);
         }
         return returnVal;
 }
@@ -124,6 +130,11 @@ static bool readTemps(uint index)
         bool returnVal = false;
         if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(gChargerUpdateIntervalMilis / 3 * NUM_CHARGERS)) == pdTRUE)
         {
+                if (Serial2.baudRate() != BAUDRATE)
+                {
+                        Serial2.updateBaudRate(BAUDRATE);
+                }
+
                 uint8_t result = charger[index].readInputRegisters(0x3110, 3);
                 
                 if (result == charger[index].ku8MBSuccess)
@@ -145,8 +156,7 @@ DBG_SECT(
 )
                         returnVal = true;
                 }
-                DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %x\n", result);})
-                vTaskDelay(pdMS_TO_TICKS(200));
+                DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %x\n", result);})                
                 result = charger[index].readInputRegisters(0x311B, 1);
                 xSemaphoreGive(gSerial2Mutex);
                 if (result == charger[index].ku8MBSuccess)
@@ -169,6 +179,11 @@ static bool readStates(uint index)
         bool returnVal = false;
         if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(gChargerUpdateIntervalMilis / 3 * NUM_CHARGERS)) == pdTRUE)
         {
+                if (Serial2.baudRate() != BAUDRATE)
+                {
+                        Serial2.updateBaudRate(BAUDRATE);
+                }
+
                 uint8_t result = charger[index].readInputRegisters(0x3200, 2);
                 xSemaphoreGive(gSerial2Mutex);
                 if (result == charger[index].ku8MBSuccess)

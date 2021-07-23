@@ -58,22 +58,23 @@ struct MessageHeader_t
 size_t readAnswerMessage()
 {
     size_t toRead,read;
+    int repeat = 2;
 
     uint8_t messagePointer = 0;
     MessageHeader_t *header =(MessageHeader_t*)messagebuffer;
-
+    header->start = 0;
     toRead = sizeof(MessageHeader_t);
     do
     {
         read = Serial2.readBytes(messagebuffer + messagePointer, toRead);
         toRead -= read;
-        messagePointer += read;
+        messagePointer += read;        
+    } while (toRead && read );
 
-    } while (toRead && read);
-
-    if(read == 0 || header->start != STARTBYTE) {
+    if(toRead != 0 || header->start != STARTBYTE) {
         // We didn't read anything or the answer has the wrong format
         // That is assumed to be an error
+        debugE("BMS: Still to read %d bytes. Startvalue is %X\n",toRead, (int)header->start);
         return 0;
     }
 
@@ -82,12 +83,13 @@ size_t readAnswerMessage()
     // dataLen + checksum + stopbyte
     toRead = header->dataLen+3; // 2bytes checksum+stopbyte
     if(toRead+sizeof(MessageHeader_t) > MAXMESSAGESIZE) {
+        debugW("BMS: Message too large %d\n", toRead );
         return 0;
     }
     
     messagePointer = 0;
      do
-    {
+    {       
         read = Serial2.readBytes(header->data + messagePointer, toRead);
         toRead -= read;
         messagePointer += read;
@@ -109,6 +111,7 @@ static bool bmsSetupBms() {
 static bool parseBasicInfo(BmsBasicInfo_t* data, uint8_t datasize) {
     
     if(datasize<sizeof(BmsBasicInfo_t) || data->size() != datasize) {
+        DEBUG_W("BMS Cellinfo: Message size too small %d or not equal message size %d\n",(int)datasize, data->size());
         return false;
     }
 
@@ -124,6 +127,7 @@ static bool parseCellInfo(BmsCellInfo_t *data, uint8_t datasize)
 
     if (data->getNumOfCells() * 2 + sizeof(uint8_t) != datasize)
     {
+        DEBUG_W("BMS Cellinfo: Message size wrong %d\n",(int)datasize);
         return false;
     }
     
@@ -143,7 +147,7 @@ static bool processMessage(uint8_t *message, size_t length) {
 
     if(header->start != STARTBYTE || header->status != 0 || length != header->dataLen+7) {
         
-        DEBUG_W("BMS: Received invalid message");
+        DEBUG_W("BMS: Received invalid message\n");
         
         return false;
     }
@@ -154,8 +158,7 @@ static bool processMessage(uint8_t *message, size_t length) {
         case 0x04: result = parseCellInfo((BmsCellInfo_t*)&header->dataLen,header->dataLen+sizeof(header->dataLen)); // Its Cell info
         break;
         default:
-            Serial.print("BMS: Got unknown answer message with type ");
-            Serial.println(header->command);
+            debugW("BMS: Got unknown answer message with type %d\n",(int)header->command);            
             break;
     }
 
@@ -166,14 +169,16 @@ static bool handleRequest(uint8_t *request, size_t length)
 {
     bool result = false;
     size_t messageSize = 0;
-    if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(bmsUpdateIntervalMilis - 100)) == pdTRUE)
+    if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(bmsUpdateIntervalMilis - 400)) == pdTRUE)
     {
         while (Serial2.read() != -1);
         if(Serial2.baudRate()!= BAUDRATE) {
-            Serial.updateBaudRate(BAUDRATE);
+            Serial2.updateBaudRate(BAUDRATE);
         }
+
         Serial2.write(request, length);
-        Serial2.flush();
+        Serial2.flush();     
+        vTaskDelay(300);  
         messageSize = readAnswerMessage();
         xSemaphoreGive(gSerial2Mutex);
         if (messageSize)
@@ -181,7 +186,7 @@ static bool handleRequest(uint8_t *request, size_t length)
             // We got an answer
             result = processMessage(messagebuffer, messageSize);
         } else {
-            Serial.println("COuld not get result message");
+             debugW("BMS: Could not get result message\n");
         }
     }
     return result;
@@ -228,14 +233,15 @@ static bool readBasicData()
 {
     static uint8_t request[7] = {0xdd, 0xa5, 0x03, 0x00, 0xff, 0xfd, 0x77};
 
+#if 0
     // This is only for DBUG_ON purposes
     static uint8_t result[] = {0xDD, 0x03, 0x00, 0x1B, 0x17, 0x00, 0x00, 0x00, 0x02, 0xD0, 0x03, 0xE8, 0x00, 0x00, 0x20, 0x78, 0x01, 0x02,
                                0x00, 0x00, 0x02, 0x04, 0x10, 0x48, 0x03, 0x0F, 0x02, 0x0B, 0x76, 0x0B, 0x82, 0xFB, 0xFF, 0x77};
     memcpy(messagebuffer, result, sizeof(result));
     processMessage(result, sizeof(result));
-
+#endif
     // Uncomment this in real software
-    //handleRequest(request, 7);
+    handleRequest(request, 7);
 
 DBG_SECT(
     if (Debug.isActive(Debug.DEBUG)) {
@@ -249,12 +255,13 @@ static bool readCellValues()
 {
     static uint8_t request[7] = {0xdd, 0xa5, 0x4, 0x0, 0xff, 0xfc, 0x77};
 
+#if 0
     static uint8_t result[] = {0xDD, 0x04, 0x00, 0x1E, 0x0F, 0x66, 0x0F, 0x63, 0x0F, 0x63, 0x0F, 0x64, 0x0F, 0x3E, 0x0F, 0x63, 0x0F, 0x37,
                                0x0F, 0x5B, 0x0F, 0x65, 0x0F, 0x3B, 0x0F, 0x63, 0x0F, 0x63, 0x0F, 0x3C, 0x0F, 0x66, 0x0F, 0x3D, 0xF9, 0xF9, 0x77};
     memcpy(messagebuffer, result, sizeof(result));
     processMessage(result, sizeof(result));
-
-    //handleRequest(request, 7);
+#endif
+    handleRequest(request, 7);
 
 DBG_SECT(
     if (Debug.isActive(Debug.DEBUG)) {
