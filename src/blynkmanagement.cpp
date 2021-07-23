@@ -196,7 +196,7 @@ if(gBmsCellInfo) {
     for(uint i = 0;i<gBmsCellInfo->getNumOfCells();++i) {
         Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)gBmsCellInfo->getCellVolt(i)/1000.0);
         if(BALANCE_STATUS(oldBalancingStatus,i) != BALANCE_STATUS(balanceStatus,i)) {
-            char txt[4];
+            char txt[8];
             if(BALANCE_STATUS(balanceStatus,i)) {
                 sprintf(txt,"%d »",i+1);
                 Blynk.setProperty(BLYNK_VPIN_CELL_VOLTAGE(i),"color",BLYNK_YELLOW);
@@ -210,8 +210,6 @@ if(gBmsCellInfo) {
     }
 }
 oldBalancingStatus = balanceStatus;
-
-
 
 }
 
