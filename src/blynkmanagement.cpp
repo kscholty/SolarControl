@@ -141,7 +141,10 @@ void blynkUpdateInverter()
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_VOLTAGE,gInverterVoltage);
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_POWER_FACTOR,gInverterPowerFactor);
      Blynk.virtualWrite(BLYNK_VPIN_INVERTER_TARGET,gInverterTarget);  
-     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_EXCESS,gExcessTarget);       
+     Blynk.virtualWrite(BLYNK_VPIN_INVERTER_EXCESS,gExcessTarget);    
+
+    // Update this one as well to make it look a little better in the app.
+     Blynk.virtualWrite(BLYNK_VPIN_ALL_LEGS, gGridSumValues[ValuePower]);   
 }
 
 void blynkUpdateBattery()

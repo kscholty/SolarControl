@@ -47,7 +47,7 @@ bool formValidator(iotwebconf::WebRequestWrapper*);
 DNSServer dnsServer;
 WebServer server(80);
 
-bool needReset = false;
+bool gNeedReset = false;
 
 
 
@@ -165,7 +165,7 @@ void wifiLoop(unsigned long now)
   iotWebConf.doLoop();
   ArduinoOTA.handle();
 
-  if(needReset) {
+  if(gNeedReset) {
       Serial.println("Rebooting after 1 second.");
       iotWebConf.delay(1000);
       ESP.restart();
@@ -211,7 +211,7 @@ void handleRoot()
 void configSaved()
 {
   Serial.println("Configuration was updated.");
-  needReset = true;
+  gNeedReset = true;
 } 
 
 bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
