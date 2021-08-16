@@ -196,8 +196,12 @@ static uint16_t oldBalancingStatus = 0;
 uint16_t balanceStatus = gBmsBasicInfo->getbalanceStatusLow();
 //BALANCE_STATUS(VAL,CELL) (((VAL)>>(CELL)) & 0x1)
 if(gBmsCellInfo) {
+    uint16_t maxV=UINT16_MAX;
+    uint16_t minV = 0;
     for(uint i = 0;i<gBmsCellInfo->getNumOfCells();++i) {
-        Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)gBmsCellInfo->getCellVolt(i)/1000.0);
+        maxV = max(maxV,gBmsCellInfo->getCellVolt(i));
+        minV = min(minV,gBmsCellInfo->getCellVolt(i));
+        Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)gBmsCellInfo->getCellVolt(i)/1000.0f);
         if(BALANCE_STATUS(oldBalancingStatus,i) != BALANCE_STATUS(balanceStatus,i)) {
             char txt[8];
             if(BALANCE_STATUS(balanceStatus,i)) {
@@ -211,6 +215,7 @@ if(gBmsCellInfo) {
             
         }
     }
+    Blynk.virtualWrite(BLYNK_VPIN_CELLDIFF,(float)(max-min) / 1000.0f);
 }
 oldBalancingStatus = balanceStatus;
 
