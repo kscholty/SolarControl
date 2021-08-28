@@ -140,7 +140,7 @@ void gInverterGridPowerUpdated()
     //gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
     lastGridUpdateReceived = millis();
-    //gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
+    gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
    
     currentPowerUsed = gGridSumValues[ValuePower];
     inverterSetRealTarget();
@@ -186,7 +186,7 @@ static void inverterLoop()
                 }  else  {
                     aPID.SetTunings(Kp,Ki,Kd);    
                 }
-                aPID.Compute();
+                //aPID.Compute();
                 //realTarget = 250;
                 if (gInverterPower < realTarget)
                 {
