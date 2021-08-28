@@ -1,6 +1,7 @@
 
 
 #include <Arduino.h>
+#include <PID_v1.h>
 #include "debugManagement.h"
 #include "excessControlManagement.h"
 #include "inverterManagement.h"
@@ -40,13 +41,16 @@ double gInverterPower = 0.0;
 float gInverterCurrent = 0.0;
 float gInverterVoltage = 0.0;
 float gInverterPowerFactor = 0.0;
-float gInverterTarget = 0.0f;
+double gInverterTarget = 0.0;
+
 
 bool gInverterExcessToGrid = false;
 
 static float realTarget = 0.0f;
-static float inverterOffset = 0;
 static uint inverterLeg = 2;
+
+static double inverterOffset = 0;
+static double currentPowerUsed = 0;
 
 static long lastGridUpdateReceived = 0;
 
@@ -58,6 +62,10 @@ static uint8_t pinValue;
 
 static bool useInverterOutput = true;
 
+//Specify the links and initial tuning parameters
+static const double Kp=0.3, Ki=0.05, Kd=0.20;
+static const double aKp=2, aKi=0.1, aKd=0.5;
+static PID aPID(&currentPowerUsed, &gInverterTarget, &inverterOffset, Kp, Ki, Kd, REVERSE);
 
 
 void inverterIdle() {
@@ -84,14 +92,19 @@ static void inverterSetupInverter()
 
     useInverterOutput = true;
 
-    if (inverterUpdateInterval < 10)
+    if (inverterUpdateInterval < 1)
     {
-        inverterUpdateInterval = 10;
+        inverterUpdateInterval = 1;
     }
 
+
+    //aPID.SetSampleTime(250);
+    aPID.SetOutputLimits(0,1000);
     gInverterTarget = inverterEmergencyTarget;
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
+
+
 
     if (inverterTimeout < 10000)
     {
@@ -108,11 +121,14 @@ static void inverterSetupInverter()
         // So our grid target is always inverterOffset
         gInverterTarget = inverterOffset;
     }
+
+    aPID.SetMode(AUTOMATIC);
+
 }
 
 void inverterSetRealTarget()
 {
-    realTarget = max((float)gExcessTarget,gInverterTarget);
+    realTarget = max((double)gExcessTarget,gInverterTarget);
 }
 
 void gInverterGridPowerUpdated()
@@ -120,21 +136,23 @@ void gInverterGridPowerUpdated()
     // New grid power use detected.
     // Now our target is this value plus the current inverter production.
     // Minus an offest to avoid overproduction.
-
-    gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
+    
+    //gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
     lastGridUpdateReceived = millis();
-    gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
+    //gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
    
+    currentPowerUsed = gGridSumValues[ValuePower];
     inverterSetRealTarget();
     
 }
 
 bool ReadInverter() {
     gInverterCurrent =  adcGetCurrent();    
+    gInverterVoltage = adcGetVoltage();
     //gInverterPower = gInverterCurrent*gInverterVoltage * gInverterPowerFactor; 
-    gInverterPower = gInverterCurrent*gInverterVoltage;  
-    //gInverterPower = adcGetPower();  
+    //gInverterPower = gInverterCurrent*gInverterVoltage;  
+    gInverterPower = adcGetPower();  
 
     return true;   
 }
@@ -163,6 +181,13 @@ static void inverterLoop()
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
                 ReadInverter();
+                if(fabs(gInverterPower - realTarget) > 200) {
+                    aPID.SetTunings(aKp,aKi,aKd);
+                }  else  {
+                    aPID.SetTunings(Kp,Ki,Kd);    
+                }
+                aPID.Compute();
+                //realTarget = 250;
                 if (gInverterPower < realTarget)
                 {
                     pinValue = HIGH;
@@ -200,6 +225,7 @@ static void inverterLoop()
                 }
             })
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
+        //vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(10));
     }
 }
 

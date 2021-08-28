@@ -17,11 +17,11 @@
 //i2s number
 #define I2S_NUM           (I2S_NUM_0)
 //i2s sample rate
-#define I2S_SAMPLE_RATE   (32000)
+#define I2S_SAMPLE_RATE   (16000)
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
 //I2S read buffer length
-#define READ_LEN      (sizeof(int16_t) * I2S_SAMPLE_RATE / 50)
+#define READ_LEN      (sizeof(int16_t) *  I2S_SAMPLE_RATE / 50)
 
 //I2S data format
 #define I2S_FORMAT        (I2S_CHANNEL_FMT_ONLY_RIGHT)
@@ -38,9 +38,9 @@
 
 // How many old values do we want to use
 // to get a more stable reading
-#define ADC_AVERAGE_COUNT 32
+#define ADC_AVERAGE_COUNT 16
 
-#define SAMPLESIZE 2
+#define SAMPLESIZE 1
 
 
 typedef uint16_t buffer_t[SAMPLESIZE * READ_LEN / sizeof(int16_t)];
@@ -64,9 +64,9 @@ void calibration(size_t,bufStruct*,bufStruct*);
 
 
 static TaskHandle_t readTask = NULL;
-static TaskHandle_t calcTask = NULL;
+
 static xQueueHandle mutex;
-static xQueueHandle i2s_event_queue;
+
 
 enum ValueType {
     CURRENT = 0,
@@ -82,8 +82,8 @@ ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
 static const int32_t avgCalibration[2]={1632,1627};
-static const int32_t maxCalibration[2]={1515,437};
-static const double maxVals[2] = {6.66,325.0};
+static const int32_t maxCalibration[2]={1515,420};
+static const double maxVals[2] = {6.66,323.0};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
@@ -91,7 +91,6 @@ bool doCalibration = false;
 
 static volatile bool stopAdcUsage=false;
 esp_adc_cal_characteristics_t *adc_chars;
-
 
 
 void characterize() {
@@ -119,7 +118,7 @@ bool adcInit()
         I2S_COMM_FORMAT_I2S,
         ESP_INTR_FLAG_LEVEL1,
         ADC_BUFFER_COUNT,
-        READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 ),
+        1024 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/ ,
         true,
         false,
         0
@@ -198,36 +197,47 @@ void readAdc(void *buffer)
     i2s_adc_enable(I2S_NUM);
     i2s_start(I2S_NUM);
     stopAdcUsage = false;
-    size_t duration = 0, count = 0;
+    size_t duration = 0, count = 0, res = 0, readt = 0;
     while (!stopAdcUsage)
     {
         if (doCalibration)
         {
-            calibration(6000,i2s_read_buff,results);
+            calibration(1000,i2s_read_buff,results);
             doCalibration = false;
         }
         else
         {
-            int64_t start = esp_timer_get_time();
+            DBG_SECT(int64_t start = esp_timer_get_time();)
             results[CURRENT].count = 0;
             results[VOLTAGE].count = 0;
             readValues(i2s_read_buff, results);  
             //printBuffer(i2s_read_buff);
+            DBG_SECT(int64_t startC = esp_timer_get_time();)
             calculate(&results[CURRENT], &results[VOLTAGE]);
-            /*
-            duration += esp_timer_get_time() - start;
-            if(++count >= 500) {
-                //Serial.printf("Loop took %d us (%f ms).\r\n",duration / count, duration/count/1000.0);
-                //Serial.printf("Calc took %d us. Voltage: %.2f Current: %.3f\r\n",res / count,adcGetVoltage(),adcGetCurrent());
-                double current,voltage,power;
-                current = adcGetCurrent();
-                voltage = adcGetVoltage();
-                power = current*voltage;
-                DEBUG_I("Calc took %d us. Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n",duration / count,voltage,current, power, adcGetPower());
-                
-                duration = count = 0;
+            
+            
+#ifndef DEBUG_DISABLED
+            if (Debug.isActive(Debug.INFO))
+            {
+                res += esp_timer_get_time() - startC;
+                duration += esp_timer_get_time() - start;
+                readt += startC-start;                
+                if (++count >= 500)
+                {
+                    //Serial.printf("Loop took %d us (%.3f ms). ",duration / count, duration/count/1000.0);
+                    //Serial.printf("Read took %d us. ",readt / count);
+                    //Serial.printf("Calc took %d us. Voltage: %.2f Current: %.3f\r\n",res / count,adcGetVoltage(),adcGetCurrent());
+                    double current, voltage, power;
+                    current = adcGetCurrent();
+                    voltage = adcGetVoltage();
+                    power = current * voltage;
+                    DEBUG_I("Calc took %d us. Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n", duration / count, voltage, current, power, adcGetPower());
+
+                    duration = count = res = readt = 0;
+                }
             }
-            */
+#endif
+            
         }
     }
 
@@ -489,7 +499,7 @@ void calculatePower(const uint16_t *currentBuf, size_t currentBufSize,const uint
         int32_t valCurrent = esp_adc_cal_raw_to_voltage(currentBuf[i], adc_chars);
         int32_t valVoltage = esp_adc_cal_raw_to_voltage(voltageBuf[i], adc_chars);
 
-        //Project measuerd value into taregt value
+        //Project measuerd value into target value
         //valCurrent = (valCurrent - avgCalibration[CURRENT]) * maxVals[CURRENT] / maxCalibration[CURRENT];
         //valVoltage = (valVoltage - avgCalibration[VOLTAGE]) * maxVals[VOLTAGE] / maxCalibration[VOLTAGE] ;
         //sumPower += valCurrent*valVoltage;
@@ -562,7 +572,7 @@ double adcGetVoltage()
     //xSemaphoreTake(mutex, portMAX_DELAY);
     double val = avgValueSquareSum[VOLTAGE];
     //xSemaphoreGive(mutex);   
-    return sqrt(val);
+    return roundf(sqrt(val));
 }
 
 double adcGetCurrent()

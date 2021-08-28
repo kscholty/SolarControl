@@ -243,9 +243,9 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 
   
   
-  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 20)
+  if (server.arg(inverterUpdateIntervalParam.getId()).toInt() < 1)
   {
-    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 20";
+    inverterUpdateIntervalParam.errorMessage = "Inverter update interval must be >= 1";
     result = false;
   }
 
