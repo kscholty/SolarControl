@@ -8,6 +8,7 @@
 #include <esp_event_loop.h>
 #include <esp_adc_cal.h>
 #include <freertos/ringbuf.h>
+#include "ButterworthLPF.h"
 
 #include "common.h"
 #include "debugManagement.h"
@@ -20,8 +21,12 @@
 #define I2S_SAMPLE_RATE   (16000)
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
+
+#define NUM_AVG_SAMPLES 2
+
+#define READ_BLOCK (sizeof(int16_t) * I2S_SAMPLE_RATE / 50 )
 //I2S read buffer length
-#define READ_LEN      (sizeof(int16_t) *  I2S_SAMPLE_RATE / 50)
+#define READ_LEN       ((NUM_AVG_SAMPLES) * (READ_BLOCK))
 
 //I2S data format
 #define I2S_FORMAT        (I2S_CHANNEL_FMT_ONLY_RIGHT)
@@ -34,11 +39,11 @@
 #define I2S_ADC_VOLTAGE_CHANNEL     ADC1_CHANNEL_5
 
 // how many buffers do we want to use for DMA
-#define ADC_BUFFER_COUNT   2
+#define ADC_BUFFER_COUNT   4
 
 // How many old values do we want to use
 // to get a more stable reading
-#define ADC_AVERAGE_COUNT 16
+#define ADC_AVERAGE_COUNT 5
 
 #define SAMPLESIZE 1
 
@@ -49,6 +54,10 @@ struct bufStruct {
     size_t count;
     buffer_t buffer;
 };
+
+static ButterworthLPF lpf1(2, 60, 8000);
+static ButterworthLPF lpf2(2, 60, 8000);
+static ButterworthLPF* filters[2] = {&lpf1,&lpf2};
 
 static void readAdc(void *);
 
@@ -81,9 +90,10 @@ enum ValueType {
 ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
-static const int32_t avgCalibration[2]={1632,1627};
-static const int32_t maxCalibration[2]={1515,420};
-static const double maxVals[2] = {6.66,323.0};
+// Real value = (value-avg)/maxCal*maxVal
+static const int32_t avgCalibration[2]={1632,1624};
+static const int32_t maxCalibration[2]={1515,431};
+static const double maxVals[2] = {6.66,329.5};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
@@ -120,7 +130,7 @@ bool adcInit()
         ADC_BUFFER_COUNT,
         1024 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/ ,
         true,
-        false,
+        true,
         0
      };
 
@@ -231,7 +241,7 @@ void readAdc(void *buffer)
                     current = adcGetCurrent();
                     voltage = adcGetVoltage();
                     power = current * voltage;
-                    DEBUG_I("Calc took %d us. Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n", duration / count, voltage, current, power, adcGetPower());
+                    DEBUG_I("#Vals %d, Calc took %d us. Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n", i2s_read_buff->count, duration / count, voltage, current, power, adcGetPower());
 
                     duration = count = res = readt = 0;
                 }
@@ -251,7 +261,7 @@ void readAdc(void *buffer)
 }
 
 
-bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, double &average, int32_t & offset) {
+bool calculateCalibrationValues(bufStruct *values, int32_t &minV, int32_t &maxV, int32_t &average, int32_t & offset) {
 
     //denoiseBuffer(values);
     //maxV = 0; 
@@ -266,7 +276,7 @@ bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, d
     for(size_t i = 0;i<values->count;++i) {
         uint16_t value = values->buffer[i];
         //if(value<1200) continue;
-        double val = esp_adc_cal_raw_to_voltage(value, adc_chars);
+        int32_t val = esp_adc_cal_raw_to_voltage(value, adc_chars);
         
         //double val = value;
 
@@ -283,7 +293,7 @@ bool calculateCalibrationValues(bufStruct *values, double &minV, double &maxV, d
 
 void calibration(size_t iterations, bufStruct* i2s_read_buff, bufStruct* results) {
     
-    #define SUBLOOP 100
+    #define SUBLOOP 10
     double avgMax[2] = {0,0};
     double avgMin[2] = {0,0};
     double avgAvg[2] = {0,0};
@@ -292,7 +302,7 @@ void calibration(size_t iterations, bufStruct* i2s_read_buff, bufStruct* results
     
     //bufStruct *i2s_read_buff = (bufStruct *)calloc(1, sizeof(bufStruct));
     //bufStruct *results = (bufStruct *)calloc(2, sizeof(bufStruct));
-    double min[2]={4096,4096},max[2]={0,0},avg[2]={0,0};   
+    int32_t min[2]={4096,4096},max[2]={0,0},avg[2]={0,0};   
     for(int i = 0; i<iterations;++i) {    
         results[CURRENT].count = 0;
         results[VOLTAGE].count = 0;     
@@ -302,17 +312,18 @@ void calibration(size_t iterations, bufStruct* i2s_read_buff, bufStruct* results
         if(i%SUBLOOP == 0) {
             avgMax[CURRENT] += max[CURRENT];
             avgMin[CURRENT] += min[CURRENT];
-            avgAvg[CURRENT] += avg[CURRENT] / counts;
+            avgAvg[CURRENT] += avg[CURRENT] / (double)counts;
             max[CURRENT] = 0;
             min[CURRENT] = 4096;
-            avg[CURRENT] = 0;            
+            avg[CURRENT] = 0; 
+            counts = 0;           
         }
         calculateCalibrationValues(&results[VOLTAGE],min[VOLTAGE],max[VOLTAGE],avg[VOLTAGE],offsets[VOLTAGE]);
         if (i % SUBLOOP == 0)
         {
             avgMax[VOLTAGE] += max[VOLTAGE];
             avgMin[VOLTAGE] += min[VOLTAGE];
-            avgAvg[VOLTAGE] += avg[VOLTAGE] / counts;
+            avgAvg[VOLTAGE] += avg[VOLTAGE] / (double)counts;
             max[VOLTAGE] = 0;
             min[VOLTAGE] = 4096;
             avg[VOLTAGE] = 0;
@@ -359,28 +370,22 @@ Serial.println("1500.0");
    // Serial.println("------------------");
 }
 
+
 void splitBuffer(const bufStruct *input, bufStruct outputChannels[2])
 {
-    uint16_t avgs[2] = {0,0};
-    uint cnts[2] = {0,0} ;
-
-    // We denoise the buffer by using the average of 4 neighbouring values.
     
-    #define handleValue(INDEX, VALUE) {\
-       avgs[(INDEX)] += (VALUE);\
-       ++cnts[(INDEX)];\
-       if(cnts[(INDEX)] == 2 ) {\       
-        actStruct = &outputChannels[(INDEX)];\        
-            actStruct->buffer[actStruct->count] = (avgs[(INDEX)]+1) >> 1;\
+    // We denoise the buffer by using the average of 4 values of consecutive reads.
+    
+    #define handleValue(INDEX, VALUE) {\        
+        actStruct = &outputChannels[(INDEX)];\
+            actStruct->buffer[actStruct->count] = filters[(INDEX)]->update(VALUE);\
             /*if(INDEX) Serial.println(actStruct->buffer[actStruct->count]);*/\
             ++actStruct->count;\
-            cnts[(INDEX)] = avgs[(INDEX)] = 0;\            
-       }\
-    }
+       }
     
     int lastIndex = (~(input->buffer[0] >> 14)) & 0x1;
-
-    for (size_t i = 0; i < input->count; ++i)
+    size_t cnt = input->count / NUM_AVG_SAMPLES;
+    for (size_t i = 0; i < cnt; ++i)
     {
         uint16_t value = input->buffer[i];
         //Serial.printf("%d: %x : %x\r\n", i,value>>12,value & 0xFFF);
@@ -409,6 +414,57 @@ void splitBuffer(const bufStruct *input, bufStruct outputChannels[2])
     //Serial.write((uint8_t*)outputChannels[VOLTAGE].buffer,outputChannels[VOLTAGE].count*2);
     //Serial.printf("Counts: 0:%d, 4:%d\n",outputChannels[0].count, outputChannels[1].count);
 }
+
+// void splitBuffer(const bufStruct *input, bufStruct outputChannels[2])
+// {
+//     uint16_t avgs[2] = {0,0};
+//     uint cnts[2] = {0,0} ;
+
+//     // We denoise the buffer by using the average of 4 values of consecutive reads.
+    
+//     #define handleValue(INDEX, VALUE) {\
+//        avgs[(INDEX)] += (VALUE);\
+//        ++cnts[(INDEX)];\
+//        if(cnts[(INDEX)] == 2 ) {\
+//         actStruct = &outputChannels[(INDEX)];\
+//             actStruct->buffer[actStruct->count] = (avgs[(INDEX)]+1) >> 1;\
+//             /*if(INDEX) Serial.println(actStruct->buffer[actStruct->count]);*/\
+//             ++actStruct->count;\
+//             cnts[(INDEX)] = avgs[(INDEX)] = 0;\
+//        }\
+//     }
+    
+//     int lastIndex = (~(input->buffer[0] >> 14)) & 0x1;
+//     size_t cnt = input->count / NUM_AVG_SAMPLES;
+//     for (size_t i = 0; i < cnt; ++i)
+//     {
+//         uint16_t value = input->buffer[i];
+//         //Serial.printf("%d: %x : %x\r\n", i,value>>12,value & 0xFFF);
+//         int index = (value >> 14) & 0x1; // 12 bytes are the value, then shift 2 more to see if its 5 or 0
+//         int otherIndex;
+//         bufStruct *actStruct;
+//         switch (lastIndex ^ index)
+//         {       // fast version of if...
+//         case 0: // The two indices are identical, therefore, generate a dummy value for the missing index
+
+//             otherIndex = (~index) & 0x1;
+//             actStruct = &outputChannels[otherIndex];
+//             //actStruct->buffer[actStruct->count++] = actStruct->buffer[actStruct->count - 1];
+//             handleValue(otherIndex,actStruct->buffer[actStruct->count - 1]);
+            
+//             // Fall through
+//         case 1:
+//             //actStruct = &outputChannels[index];
+//             //actStruct->buffer[actStruct->count++] = value & 0x0FFF;
+//             handleValue(index,value & 0x0FFF);
+//         }
+//         lastIndex = index;
+//     }
+
+    
+    //Serial.write((uint8_t*)outputChannels[VOLTAGE].buffer,outputChannels[VOLTAGE].count*2);
+    //Serial.printf("Counts: 0:%d, 4:%d\n",outputChannels[0].count, outputChannels[1].count);
+//}
 
 void denoiseBuffer(bufStruct *buff) {
     

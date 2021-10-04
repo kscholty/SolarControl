@@ -63,10 +63,12 @@ static uint8_t pinValue;
 static bool useInverterOutput = true;
 
 //Specify the links and initial tuning parameters
-static const double Kp=0.3, Ki=0.05, Kd=0.20;
-static const double aKp=2, aKi=0.1, aKd=0.5;
+double Kp=0.46, Ki=0.25, Kd=0.7;
 static PID aPID(&currentPowerUsed, &gInverterTarget, &inverterOffset, Kp, Ki, Kd, REVERSE);
 
+void inverterActivatePidValues() {
+    aPID.SetTunings(Kp,Ki,Kd);
+}
 
 void inverterIdle() {
     vTaskDelay(10);
@@ -98,7 +100,7 @@ static void inverterSetupInverter()
     }
 
 
-    //aPID.SetSampleTime(250);
+    aPID.SetSampleTime(480);
     aPID.SetOutputLimits(0,1000);
     gInverterTarget = inverterEmergencyTarget;
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
@@ -140,9 +142,19 @@ void gInverterGridPowerUpdated()
     //gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
     lastGridUpdateReceived = millis();
-    gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
+    //gInverterTarget = gGridSumValues[ValuePower] + gInverterPower - inverterOffset;
    
     currentPowerUsed = gGridSumValues[ValuePower];
+
+    if (currentPowerUsed < 0 || fabs(currentPowerUsed - inverterOffset) > 2*inverterOffset)
+    {
+        aPID.SetTunings(Kp, Ki, Kd);
+    }
+    else
+    {
+        aPID.SetTunings(Kp / 2, Ki, Kd);
+    }
+    
     inverterSetRealTarget();
     
 }
@@ -181,13 +193,8 @@ static void inverterLoop()
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
                 ReadInverter();
-                if(fabs(gInverterPower - realTarget) > 200) {
-                    aPID.SetTunings(aKp,aKi,aKd);
-                }  else  {
-                    aPID.SetTunings(Kp,Ki,Kd);    
-                }
-                //aPID.Compute();
-                //realTarget = 250;
+                
+                aPID.Compute();
                 if (gInverterPower < realTarget)
                 {
                     pinValue = HIGH;

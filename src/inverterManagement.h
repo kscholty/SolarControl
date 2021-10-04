@@ -13,6 +13,13 @@ enum EGridValueTypes {
     ValueNumValues
 };
 
+
+extern double Kp;
+extern double Ki;
+extern double Kd;
+
+extern void inverterActivatePidValues();
+
 // This contains all lage values of the different 
 // Types
 extern float gGridLegValues[ValueNumValues][3];

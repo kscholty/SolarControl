@@ -182,6 +182,15 @@ void mqttSetupMqtt() {
     
 }
 
+
+static void requestUpdate() {
+    String subscriptionBase("shellies/");
+    subscriptionBase += mqttEM3Name;
+    subscriptionBase += "/command";
+
+    mqttClient.publish(subscriptionBase.c_str(), "update");
+}
+
 static void mqttLoop()
 {
     TickType_t previousTime = xTaskGetTickCount();
@@ -212,7 +221,8 @@ DBG_SECT(
                 mqttClient.loop();
             } while (wifiClient.available());                                                  
         }
-        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(500));
+        //requestUpdate();
+        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(250));
     }
 }
 

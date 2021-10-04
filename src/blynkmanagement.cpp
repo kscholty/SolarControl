@@ -233,7 +233,7 @@ void blynkSetup()
     }
 
 
-    if (blynkUpdateTimer.setInterval(blynkUpdateInterval >> 1, blynkUpdateInverter) < 0)
+    if (blynkUpdateTimer.setInterval(max(blynkUpdateInterval >> 1,1000l), blynkUpdateInverter) < 0)
     {
         Serial.println("Cannot create blynk blynkUpdateInverter update timer");
     }
@@ -247,7 +247,7 @@ void blynkSetup()
     delay(300); 
     if (gChargerNumValidChargers > 0)
     {
-        if (blynkUpdateTimer.setInterval(blynkUpdateInterval / NUM_CHARGERS, blynkUpdateChargeController) < 0)
+        if (blynkUpdateTimer.setInterval(max(blynkUpdateInterval / NUM_CHARGERS,1000l), blynkUpdateChargeController) < 0)
         {
             Serial.println("Cannot create blynk charge controller 1 timer");
         }
@@ -280,6 +280,11 @@ DBG_SECT(
     {
         Blynk.setProperty(BLYNK_VPIN_BLE_CONNECTED, "color", BLYNK_RED);
     }
+
+    Blynk.virtualWrite(BLYNK_VPIN_PID_P,Kp);
+    Blynk.virtualWrite(BLYNK_VPIN_PID_I,Ki);
+    Blynk.virtualWrite(BLYNK_VPIN_PID_D,Kd);
+
     Serial.println("Blynk connected");
     blynkUpdateTimer.enableAll();
 }
@@ -364,6 +369,25 @@ BLYNK_WRITE(V58)
 }
 
 DBG_SECT(
+
+BLYNK_WRITE(BLYNK_VPIN_PID_P) {
+    Kp = param.asDouble();
+}
+
+BLYNK_WRITE(BLYNK_VPIN_PID_I) {
+    Ki = param.asDouble();
+}
+
+BLYNK_WRITE(BLYNK_VPIN_PID_D) {
+    Kd = param.asDouble();
+}
+
+BLYNK_WRITE(BLYNK_VPIN_PID_OK) {
+    if(param.asInt() == 1) {
+        inverterActivatePidValues();
+    }
+}
+
 BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
 {
     Serial.print("BLYNK_VPIN_MQTT_ENABLE changed: ");
