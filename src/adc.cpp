@@ -91,9 +91,9 @@ ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
 // Real value = (value-avg)/maxCal*maxVal
-static const int32_t avgCalibration[2]={1632,1624};
-static const int32_t maxCalibration[2]={1515,431};
-static const double maxVals[2] = {6.66,329.5};
+static const int32_t avgCalibration[2]={1546,1618};
+static const int32_t maxCalibration[2]={1515,356};
+static const double maxVals[2] = {6.66,325.0};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
