@@ -22,7 +22,7 @@
 //i2s data bits
 #define I2S_SAMPLE_BITS   (I2S_BITS_PER_SAMPLE_16BIT)
 
-#define NUM_AVG_SAMPLES 2
+#define NUM_AVG_SAMPLES 1
 
 #define READ_BLOCK (sizeof(int16_t) * I2S_SAMPLE_RATE / 50 )
 //I2S read buffer length
@@ -47,8 +47,11 @@
 
 #define SAMPLESIZE 1
 
+// Number of sampleas Voltage is behind Current
+// In my case it's 1ms  
+#define VOLTAGE_OFFSET (I2S_SAMPLE_RATE / 2000)
 
-typedef uint16_t buffer_t[SAMPLESIZE * READ_LEN / sizeof(int16_t)];
+typedef uint16_t buffer_t[(SAMPLESIZE * READ_LEN+VOLTAGE_OFFSET) / sizeof(int16_t)];
 struct bufStruct {
     bufStruct() { count = 0;}
     size_t count;
@@ -91,9 +94,9 @@ ICACHE_RAM_ATTR static double  avgValueSquareSum[MaxValueType] = {0.0,0.0,0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
 // Real value = (value-avg)/maxCal*maxVal
-static const int32_t avgCalibration[2]={1546,1618};
-static const int32_t maxCalibration[2]={1515,356};
-static const double maxVals[2] = {6.66,325.0};
+static const int32_t avgCalibration[2]={1524,1630};
+static const int32_t maxCalibration[2]={1270,367};
+static const double maxVals[2] = {6.66,337};
 
 int oldValsPos[MaxValueType] = {0,0,0};
 
@@ -137,7 +140,7 @@ bool adcInit()
     
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(I2S_ADC_CURRENT_CHANNEL, ADC_ATTEN_DB_11);
-    adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_2_5);
 
      
      //install and start i2s driver
@@ -216,21 +219,24 @@ void readAdc(void *buffer)
             doCalibration = false;
         }
         else
-        {
-            DBG_SECT(int64_t start = esp_timer_get_time();)
+        {           
             results[CURRENT].count = 0;
-            results[VOLTAGE].count = 0;
+            results[VOLTAGE].count = VOLTAGE_OFFSET;  // Shift the values according to the ofdfsets
+            DBG_SECT(int64_t start = esp_timer_get_time();)
             readValues(i2s_read_buff, results);  
             //printBuffer(i2s_read_buff);
             DBG_SECT(int64_t startC = esp_timer_get_time();)
             calculate(&results[CURRENT], &results[VOLTAGE]);
+            // Put the last values into the front of the buffer for the next iteration.
+            memmove(results[VOLTAGE].buffer,results[VOLTAGE].buffer+(results[VOLTAGE].count-VOLTAGE_OFFSET),VOLTAGE_OFFSET*sizeof(uint16_t));
             
             
 #ifndef DEBUG_DISABLED
             if (Debug.isActive(Debug.INFO))
             {
-                res += esp_timer_get_time() - startC;
-                duration += esp_timer_get_time() - start;
+                int64_t now = esp_timer_get_time();
+                res +=  now - startC;
+                duration += now - start;
                 readt += startC-start;                
                 if (++count >= 500)
                 {
@@ -241,7 +247,7 @@ void readAdc(void *buffer)
                     current = adcGetCurrent();
                     voltage = adcGetVoltage();
                     power = current * voltage;
-                    DEBUG_I("#Vals %d, Calc took %d us. Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n", i2s_read_buff->count, duration / count, voltage, current, power, adcGetPower());
+                    DEBUG_I("#Vals %d, Times: Read %d us, Calc %d us. Sum %d Res: Voltage: %.2f Current: %.3f, apower %.3f rpower %.3f\r\n", i2s_read_buff->count, readt / count, res/count, duration / count, voltage, current, power, adcGetPower());
 
                     duration = count = res = readt = 0;
                 }
@@ -376,7 +382,7 @@ void splitBuffer(const bufStruct *input, bufStruct outputChannels[2])
     
     // We denoise the buffer by using the average of 4 values of consecutive reads.
     
-    #define handleValue(INDEX, VALUE) {\        
+    #define handleValue(INDEX, VALUE) {\
         actStruct = &outputChannels[(INDEX)];\
             actStruct->buffer[actStruct->count] = filters[(INDEX)]->update(VALUE);\
             /*if(INDEX) Serial.println(actStruct->buffer[actStruct->count]);*/\
@@ -495,7 +501,8 @@ double calculateSquareMean(bufStruct *aBuf, ValueType calibrationValueIndex)
     const int32_t zeroValue2 = zeroValues2[calibrationValueIndex];
     double res;
     //double avgVal=0.0;
-    for (size_t i = 0; i < aBuf->count; ++i, ++buffer)
+    int32_t upper = calibrationValueIndex == VOLTAGE ? aBuf->count - VOLTAGE_OFFSET : aBuf->count;
+    for (size_t i = 0; i < upper; ++i, ++buffer)
     {
         // Get voltage
         //Serial.printf("%d\r\n",(int)*buffer);
@@ -509,10 +516,12 @@ double calculateSquareMean(bufStruct *aBuf, ValueType calibrationValueIndex)
         sum += (val * val)-(val*zeroValue2);
         //Serial.printf("%f\r\n",val);
     }
-    if (aBuf->count)
+    if (upper)
     {
         //sum = sum / (aBuf->count * ADC_AVERAGE_COUNT);
-        res = ((CStarSquares[calibrationValueIndex]*sum) / aBuf->count+CStarSquares[calibrationValueIndex]*C1Squares[calibrationValueIndex]) / ADC_AVERAGE_COUNT;
+        res = ((CStarSquares[calibrationValueIndex]*sum) / upper+CStarSquares[calibrationValueIndex]*C1Squares[calibrationValueIndex]) / ADC_AVERAGE_COUNT;
+    } else  {
+        res = 0;
     }
     #if 0
     static size_t count = 0;
