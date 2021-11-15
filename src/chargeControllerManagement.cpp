@@ -1,5 +1,5 @@
 
-#include <ModbusMaster.h>
+#include <ArduinoModbus.h>
 #include "debugManagement.h"
 #include "chargeControllerManagement.h"
 #include "excessControlManagement.h"
@@ -15,8 +15,12 @@ unsigned int gChargerNumValidChargers = 0;
 bool gChargerValuesChanged[NUM_CHARGERS];
 
 static uint8_t chargerModbusAdresses[NUM_CHARGERS];
-static ModbusMaster charger[NUM_CHARGERS];
+
 unsigned long gChargerUpdateIntervalMilis = 15000;
+
+static RS485Class rs485Interface(Serial2,17,-1,-1);
+static ModbusRTUClientClass modbusClient(rs485Interface);
+
 SemaphoreHandle_t gSerial2Mutex = 0;
 StaticSemaphore_t xSemaphoreBuffer;
 
@@ -45,10 +49,10 @@ static void chargeControllerSetupController()
         Serial2.begin(BAUDRATE);
         for (int i = 0; i < NUM_CHARGERS; ++i)
         {
-                if (chargerValid(i))
-                {
-                        charger[i].begin(chargerModbusAdresses[i], Serial2);
-                }
+//                if (chargerValid(i))
+//                {
+//                        charger[i].begin(chargerModbusAdresses[i], Serial2);
+//                }
                 memset(chargerValues[i], 0, NUM_CHARGER_VALUES * sizeof(chargerValues[0][0]));
         }
 }
@@ -58,7 +62,7 @@ bool chargerReadPvAndBattery(uint index)
         bool returnVal = false;
         if (xSemaphoreTake(gSerial2Mutex, pdMS_TO_TICKS(gChargerUpdateIntervalMilis / 3 * NUM_CHARGERS)) == pdTRUE)
         {
-                uint8_t result;
+                bool result;
                 uint count = 0;
                 
                 if (Serial2.baudRate() != BAUDRATE)
@@ -68,37 +72,37 @@ bool chargerReadPvAndBattery(uint index)
 
                 do
                 {
-                        result = charger[index].readInputRegisters(0x3100, 8);
+                        result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS, 0x3100, 8);                        
                         xSemaphoreGive(gSerial2Mutex);
-                        if (result == charger[index].ku8MBSuccess)
+                        if (result && modbusClient.available() >= 8)
                         {
 
-                                chargerValues[index][PV_VOLTAGE] = charger[index].getResponseBuffer(0x00);
+                                chargerValues[index][PV_VOLTAGE] = modbusClient.read();
 DBG_SECT(
                                 rprintD("PV Voltage: ");
                                 rprintDln(chargerValues[index][PV_VOLTAGE]);
 )
-                                chargerValues[index][PV_CURRENT] = charger[index].getResponseBuffer(0x01);
+                                chargerValues[index][PV_CURRENT] = modbusClient.read();
 DBG_SECT(
                                 rprintD("PV Current: ");
                                 rprintDln(chargerValues[index][PV_CURRENT]);
 )
-                                chargerValues[index][PV_POWER] = MK_32(charger[index].getResponseBuffer(0x02), charger[index].getResponseBuffer(0x03));
+                                chargerValues[index][PV_POWER] = MK_32(modbusClient.read(), modbusClient.read());
 DBG_SECT(
                                 rprintD("PV Power: ");
                                 rprintDln(chargerValues[index][PV_POWER]);
 )
-                                chargerValues[index][BATTERY_VOLTAGE] = charger[index].getResponseBuffer(0x04);
+                                chargerValues[index][BATTERY_VOLTAGE] = modbusClient.read();
 DBG_SECT(
                                 rprintD("Battery Voltage: ");
                                 rprintDln(chargerValues[index][BATTERY_VOLTAGE]);
 )
-                                chargerValues[index][BATTERY_CHARGE_CURRENT] = charger[index].getResponseBuffer(0x05);
+                                chargerValues[index][BATTERY_CHARGE_CURRENT] = modbusClient.read();
 DBG_SECT(
                                 rprintD("Battery Charge Current: ");
                                 rprintDln(chargerValues[index][BATTERY_CHARGE_CURRENT]);
 )
-                                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(charger[index].getResponseBuffer(0x06), charger[index].getResponseBuffer(0x07));
+                                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(modbusClient.read(), modbusClient.read());
 DBG_SECT(
                                 rprintD("PV Power: ");
                                 rprintDln(chargerValues[index][PV_POWER]);
@@ -117,9 +121,10 @@ DBG_SECT(
 )
                                 returnVal = true;
                         } else {
-                                DEBUG_E("Reading charger PV/Bat failed with %x\n", result);
+                                DEBUG_E("Reading charger PV/Bat failed with %s\n", modbusClient.lastError());
                                 vTaskDelay(pdMS_TO_TICKS(200));
                         }
+                        
                 } while (!returnVal && ++count < 3);
         }
         return returnVal;
@@ -135,41 +140,41 @@ static bool readTemps(uint index)
                         Serial2.updateBaudRate(BAUDRATE);
                 }
 
-                uint8_t result = charger[index].readInputRegisters(0x3110, 3);
-                
-                if (result == charger[index].ku8MBSuccess)
+                bool result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS, 0x3110, 3);                        
+                                
+                if (result && modbusClient.available() >= 3)
                 {
-                        chargerValues[index][BATTERY_TEMP] = charger[index].getResponseBuffer(0x00);
+                        chargerValues[index][BATTERY_TEMP] = modbusClient.read();
 DBG_SECT(
                         rprintD("Battery Temp: ");
                         rprintDln(chargerValues[index][BATTERY_TEMP]);
 )
-                        chargerValues[index][CONTROLLER_INTERNAL_TEMP] = charger[index].getResponseBuffer(0x01);
+                        chargerValues[index][CONTROLLER_INTERNAL_TEMP] = modbusClient.read();
 DBG_SECT(
                         rprintD("Controller internal Temp: ");
                         rprintDln(chargerValues[index][CONTROLLER_INTERNAL_TEMP]);
 )
-                        chargerValues[index][CONTROLLER_INTERNAL_TEMP] = charger[index].getResponseBuffer(0x02);
+                        chargerValues[index][CONTROLLER_INTERNAL_TEMP] = modbusClient.read();
 DBG_SECT(
                         rprintD("Controller Power component Temp: ");
                         rprintDln(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);
 )
                         returnVal = true;
                 }
-                DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %x\n", result);})                
-                result = charger[index].readInputRegisters(0x311B, 1);
+                DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %s\n", modbusClient.lastError());})                
+                result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS, 0x3110, 3);
                 xSemaphoreGive(gSerial2Mutex);
-                if (result == charger[index].ku8MBSuccess)
+                if (result && modbusClient.available() >= 3)
                 {
 
-                        chargerValues[index][BATTERY_EXTERNAL_TEMP] = charger[index].getResponseBuffer(0x00);
+                        chargerValues[index][BATTERY_EXTERNAL_TEMP] = modbusClient.read();
 DBG_SECT(
                         rprintD("Battery external Temp: ");
                         rprintDln(chargerValues[index][BATTERY_EXTERNAL_TEMP]);
 )
                         returnVal = true;
                 }
-                 DBG_SECT( else {DEBUG_E("Reading charger external TMP failed with %x\n", result);})
+                 DBG_SECT( else {DEBUG_E("Reading charger external TMP failed with %s\n", modbusClient.lastError());})
         }
         return returnVal;
 }
@@ -184,15 +189,15 @@ static bool readStates(uint index)
                         Serial2.updateBaudRate(BAUDRATE);
                 }
 
-                uint8_t result = charger[index].readInputRegisters(0x3200, 2);
+                bool result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS,0x3200, 2);
                 xSemaphoreGive(gSerial2Mutex);
-                if (result == charger[index].ku8MBSuccess)
+                if (result && modbusClient.available() >= 2)
                 {
-                        chargerValues[index][BATTERY_STATUS] = charger[index].getResponseBuffer(0x00);
-                        chargerValues[index][CONTROLLER_STATUS] = charger[index].getResponseBuffer(0x01);
+                        chargerValues[index][BATTERY_STATUS] = modbusClient.read();
+                        chargerValues[index][CONTROLLER_STATUS] = modbusClient.read();
                         returnVal = true;
                 } 
-                 DBG_SECT( else {DEBUG_E("Reading charger states failed with %x\n", result);})
+                 DBG_SECT( else {DEBUG_E("Reading charger states failed with %s\n", modbusClient.lastError());})
         }
         return returnVal;
 }
@@ -305,7 +310,8 @@ void chargeControllerSetup()
 
         gSerial2Mutex = xSemaphoreCreateMutexStatic(&xSemaphoreBuffer);
         gChargerNumValidChargers = calculateChargerIds();
-        setUpdateMillis();
+        setUpdateMillis();   
+        modbusClient.begin(BAUDRATE);    
         DBG_SECT(
             rprintD("Num controllers : ");
             rprintDln(gChargerNumValidChargers);)
