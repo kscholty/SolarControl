@@ -9,6 +9,7 @@
 #include "ssrManagement.h"
 #include "excessControlManagement.h"
 #include "debugManagement.h"
+#include "modbusManagement.h"
 
 
 void setup() {
@@ -24,6 +25,7 @@ void setup() {
   setupExcessManagement(); // Has to be after the inverter
   blynkSetup(); // This should be last, in order to have all data available
   debugSetup();
+  modbusSetup();
   //ssrSetup();
 }
 
@@ -32,6 +34,7 @@ void loop() {
   unsigned long now = millis();
   wifiLoop(now);
   blynkLoop(now);
+  modbusLoop(now);
   debugLoop(now);
   //ssrLoop(now);
 }
