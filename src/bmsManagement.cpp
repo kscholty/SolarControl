@@ -4,7 +4,7 @@
 #include "common.h"
 #include "debugManagement.h"
 #include "bmsManagement.h"
-
+#include "modbusManagement.h"
 
 /*
 // A
@@ -290,6 +290,7 @@ void bmsLoop(void *)
             // Query the BMS
             readBasicData();
             readCellValues();
+            modbusUpdateBMSValues();            
         }
     }
 }

@@ -3,6 +3,7 @@
 #include "debugManagement.h"
 #include "chargeControllerManagement.h"
 #include "excessControlManagement.h"
+#include "modbusManagement.h"
 
 
 #define BAUDRATE 115200
@@ -298,6 +299,7 @@ DBG_SECT(
                         }
                 }
                 gCurrentPowerCreated = calculateInstantPower();
+                modbusUpdateChargerValues();
                 if (gExcessTaskId)
                 {
                         // Let's re-calculate the excess values...

@@ -2,7 +2,7 @@
 
 
 extern void modbusUpdateChargerValues();
-extern void modbusUpdateInvcverterValues();
+extern void modbusUpdateInverterValues();
 extern void modbusUpdateBMSValues();
 
 extern void modbusSetup();

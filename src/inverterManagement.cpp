@@ -6,6 +6,7 @@
 #include "excessControlManagement.h"
 #include "inverterManagement.h"
 #include "adc.h"
+#include "modbusManagement.h"
 
 #if DBUG_ON
 #include "mqttmanagement.h"
@@ -165,7 +166,7 @@ bool ReadInverter() {
     //gInverterPower = gInverterCurrent*gInverterVoltage * gInverterPowerFactor; 
     //gInverterPower = gInverterCurrent*gInverterVoltage;  
     gInverterPower = adcGetPower();  
-
+    modbusUpdateInverterValues();
     return true;   
 }
 
