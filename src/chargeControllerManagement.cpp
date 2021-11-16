@@ -87,7 +87,9 @@ DBG_SECT(
                                 rprintD("PV Current: ");
                                 rprintDln(chargerValues[index][PV_CURRENT]);
 )
-                                chargerValues[index][PV_POWER] = MK_32(modbusClient.read(), modbusClient.read());
+                                int32_t low = modbusClient.read();
+                                int32_t high = modbusClient.read();
+                                chargerValues[index][PV_POWER] = MK_32(low, high);
 DBG_SECT(
                                 rprintD("PV Power: ");
                                 rprintDln(chargerValues[index][PV_POWER]);
@@ -102,7 +104,9 @@ DBG_SECT(
                                 rprintD("Battery Charge Current: ");
                                 rprintDln(chargerValues[index][BATTERY_CHARGE_CURRENT]);
 )
-                                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(modbusClient.read(), modbusClient.read());
+                                low = modbusClient.read();
+                                high = modbusClient.read();
+                                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(low, high);
 DBG_SECT(
                                 rprintD("PV Power: ");
                                 rprintDln(chargerValues[index][PV_POWER]);
