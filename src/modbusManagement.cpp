@@ -1,18 +1,26 @@
 
 #include <WiFi.h>
-#include <WiFiServer.h>
+#include <ModbusTCP.h>
 #include "common.h"
 #include "debugManagement.h"
 #include "modbusManagement.h"
-#include "ModbusTCPServer.h"
 #include "excessControlManagement.h"
 #include "inverterManagement.h"
 #include "bmsManagement.h"
 
-static WiFiServer wifiServer(502);
-static ModbusTCPServer modbusServer;
+
+ 
+static ModbusTCP *modbusServer = 0;
 
 static bool needsReconnect = true;
+enum REGISTERS {
+  REG_BATTERY_VOLTAGE=0,
+  REG_BATTERY_CURRENT=1,
+  REG_BATTERY_SOC = 2,
+  REG_CHARGER_POWER = 3,
+  REG_INVERTER_POWER = 4,
+  REG_NUM_REGISTERS
+};
 
 //The Holding registers are:
 // 0: Battery Voltage. Unit: 10mV
@@ -21,32 +29,67 @@ static bool needsReconnect = true;
 // 3: Charge power. Unit: 100mW
 // 4: InverterPower. Unit: 100mW
 
-void modbusUpdateChargerValues() {
-  modbusServer.holdingRegisterWrite(3, gCurrentPowerCreated*10);
+uint16_t getter(TRegister *reg, uint16_t val)
+{
+  REGISTERS regNum = (REGISTERS)(reg->address.address);
+
+  switch (regNum)
+  {
+  case REG_BATTERY_VOLTAGE:
+    if(gBmsBasicInfo)  return gBmsBasicInfo->getTotalVoltage();
+    break;
+  case REG_BATTERY_CURRENT:
+    if(gBmsBasicInfo)  return gBmsBasicInfo->getcurrent();
+    break;
+  case REG_BATTERY_SOC:
+    if(gBmsBasicInfo)  return gBmsBasicInfo->getstateOfCharge();
+    break;
+  case REG_CHARGER_POWER:
+    return gCurrentPowerCreated * 10;
+    break;
+  case REG_INVERTER_POWER:
+    return (int16_t)(gInverterPower * 10);
+    break;
+  default:
+    return UINT16_MAX;
+  }
+  return UINT16_MAX;
 }
 
-void modbusUpdateInverterValues() {
-  modbusServer.holdingRegisterWrite(4,(int16_t)(gInverterPower*10));
+bool onConnect(IPAddress addr) {  
+  DEBUG_I("Client connected from %s\n",addr.toString().c_str());
+  return true;
 }
 
-void modbusUpdateBMSValues() {
-  modbusServer.holdingRegisterWrite(0,gBmsBasicInfo->getTotalVoltage());
-  modbusServer.holdingRegisterWrite(1,gBmsBasicInfo->getcurrent());
-  modbusServer.holdingRegisterWrite(2,gBmsBasicInfo->getstateOfCharge());
+bool onDisConnect(IPAddress addr) {
+  DEBUG_I("Client disconnected  %s\n",addr.toString().c_str());
+  return true;
 }
 
-void modbusSetup() {
+
+void modbusSetup()
+{
   needsReconnect = true;
-  modbusServer.configureHoldingRegisters(0,5);
+  
 }
 
 void modbusReconnect()
 {
-    DEBUG_I("Connecting modbusServer");
-    wifiServer.end();
-    wifiServer.begin();
-    modbusServer.begin();    
-    needsReconnect = false;
+  DEBUG_I("Connecting modbusServer");
+  if (modbusServer)
+  {
+    delete modbusServer;
+  }
+  modbusServer = new ModbusTCP;
+  //Config Modbus IP
+  modbusServer->server(502);
+  modbusServer->cbEnable(true);
+  modbusServer->addHreg(0, 0, REG_NUM_REGISTERS);
+  modbusServer->onGet(HREG(0), getter, REG_NUM_REGISTERS);
+  modbusServer->onConnect(onConnect);
+  modbusServer->onDisconnect(onDisConnect);
+
+  needsReconnect = false;
 }
 
 void modbusLoop(unsigned long)
@@ -58,22 +101,8 @@ void modbusLoop(unsigned long)
     {
       modbusReconnect();
     }
-    // listen for incoming clients
-    WiFiClient client = wifiServer.available();
-
-    if (client)
-    {
-      DEBUG_I("Modbus client connected");
-      // let the Modbus TCP accept the connection
-      modbusServer.accept(client);
-
-      while (client.connected())
-      {
-        // poll for Modbus TCP requests, while client connected
-        modbusServer.poll();
-      }
-      DEBUG_I("Modbus client disconnected");
-    }
+    // poll for Modbus TCP requests, while client connected
+    modbusServer->task();
   }
   else
   {

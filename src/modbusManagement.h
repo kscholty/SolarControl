@@ -1,8 +1,8 @@
 #pragma once
 
 
-extern void modbusUpdateChargerValues();
-extern void modbusUpdateInverterValues();
+
+
 extern void modbusUpdateBMSValues();
 
 extern void modbusSetup();

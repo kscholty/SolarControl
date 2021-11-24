@@ -289,8 +289,7 @@ void bmsLoop(void *)
         {
             // Query the BMS
             readBasicData();
-            readCellValues();
-            modbusUpdateBMSValues();            
+            readCellValues();         
         }
     }
 }

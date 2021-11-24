@@ -166,7 +166,6 @@ bool ReadInverter() {
     //gInverterPower = gInverterCurrent*gInverterVoltage * gInverterPowerFactor; 
     //gInverterPower = gInverterCurrent*gInverterVoltage;  
     gInverterPower = adcGetPower();  
-    modbusUpdateInverterValues();
     return true;   
 }
 
