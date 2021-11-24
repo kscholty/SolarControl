@@ -158,7 +158,7 @@ DBG_SECT(
                         rprintD("Controller internal Temp: ");
                         rprintDln(chargerValues[index][CONTROLLER_INTERNAL_TEMP]);
 )
-                        chargerValues[index][CONTROLLER_INTERNAL_TEMP] = modbusClient.read();
+                        chargerValues[index][CONTROLLER_POWER_COMP_TEMP] = modbusClient.read();
 DBG_SECT(
                         rprintD("Controller Power component Temp: ");
                         rprintDln(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);
@@ -166,9 +166,9 @@ DBG_SECT(
                         returnVal = true;
                 }
                 DBG_SECT( else {DEBUG_E("Reading charger TMP failed with %s\n", modbusClient.lastError());})                
-                result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS, 0x3110, 3);
+                result = modbusClient.requestFrom(chargerModbusAdresses[index], INPUT_REGISTERS, 0x311B, 1);
                 xSemaphoreGive(gSerial2Mutex);
-                if (result && modbusClient.available() >= 3)
+                if (result && modbusClient.available() >= 1)
                 {
 
                         chargerValues[index][BATTERY_EXTERNAL_TEMP] = modbusClient.read();
