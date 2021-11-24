@@ -37,7 +37,7 @@ struct StateData {
  uint8_t resent;
 };
 
-static uint16_t recvBuffer[6];
+static uint16_t recvBuffer[16];
 static StateData states[NUMSTATES] = {{0x3100,8,chargerReadPvAndBattery,R_TEMPS,0}, {0x3110,5,readTemps,R_STATES,0}, {0x3200,2,readStates,NEXTCHARGER,0}};
 
 static STATE currentState = START;
@@ -97,14 +97,14 @@ void changeState(STATE newState) {
 }
 
 
-bool hRegCallback(Modbus::ResultCode event, uint16_t, void *data)
+bool hRegCallback(Modbus::ResultCode event, uint16_t, void *)
 {
         xSemaphoreGive(gSerial2Mutex);
         StateData *state = &states[lastState];
 
         if (event == Modbus::EX_SUCCESS)
         {
-                state->parser(currentIndex, (uint16_t*)data, states->numRegisters);
+                state->parser(currentIndex, recvBuffer, state->numRegisters);
                 gChargerValuesChanged[currentIndex] = true;
         }
         else
@@ -119,7 +119,7 @@ bool hRegCallback(Modbus::ResultCode event, uint16_t, void *data)
                 } else {
                         // Failed finally.
                         // Call the parser to handle the error
-                        state->parser(currentIndex, (uint16_t*)data, 0);
+                        state->parser(currentIndex, 0, 0);
                 }
         }
 
@@ -148,7 +148,7 @@ static bool sendRequest()
                 }
                 
                 changeState(TASK);
-                if (!modbusClient.readHreg(chargerModbusAdresses[currentIndex], state->offset, recvBuffer, state->numRegisters, hRegCallback))
+                if (!modbusClient.readIreg(chargerModbusAdresses[currentIndex], state->offset, recvBuffer, state->numRegisters, hRegCallback))
                 {
                         xSemaphoreGive(gSerial2Mutex);
                         changeState(state->nextState);
