@@ -14,13 +14,15 @@
 
 static bool chargerReadPvAndBattery(uint16_t,uint16_t *,uint16_t );
 static bool readTemps(uint16_t,uint16_t *,uint16_t );
+static bool readExternalTemps(uint16_t,uint16_t *,uint16_t );
 static bool readStates(uint16_t,uint16_t *,uint16_t );
 
 enum STATE {
         START = -1,        
         R_PV_BAT=0,        
-        R_TEMPS = 1,        
-        R_STATES = 2,
+        R_TEMPS = 1,    
+        R_EXT_TEMPS = 2,    
+        R_STATES = 3,
         TASK,
         NEXTCHARGER,
         SLEEP,
@@ -38,7 +40,12 @@ struct StateData {
 };
 
 static uint16_t recvBuffer[16];
-static StateData states[NUMSTATES] = {{0x3100,8,chargerReadPvAndBattery,R_TEMPS,0}, {0x3110,5,readTemps,R_STATES,0}, {0x3200,2,readStates,NEXTCHARGER,0}};
+static StateData states[NUMSTATES] = {
+        {0x3100,8,chargerReadPvAndBattery,R_TEMPS,0}, 
+        {0x3110,3,readTemps,R_STATES /*R_EXT_TEMPS*/,0}, 
+        {0x311B,1,readExternalTemps,R_STATES,0}, 
+        {0x3200,2,readStates,NEXTCHARGER,0}
+};
 
 static STATE currentState = START;
 static STATE lastState = SLEEP;
@@ -107,11 +114,12 @@ bool hRegCallback(Modbus::ResultCode event, uint16_t, void *)
                 state->parser(currentIndex, recvBuffer, state->numRegisters);
                 gChargerValuesChanged[currentIndex] = true;
         }
-        else
+        else 
         {
                 DEBUG_E("Charger query for %hu in state %hu failed with %hu\n", currentIndex, lastState, event);
-                if (state->resent < MAXRETRIES)
+                if ( (state->resent < MAXRETRIES) && (event == Modbus::EX_TIMEOUT))
                 {
+                        // If we got a timeout we try it again.
                         changeState(lastState);
                         state->resent++;
                         vTaskDelay(pdMS_TO_TICKS(200));
@@ -229,7 +237,7 @@ static bool readTemps(uint16_t index, uint16_t *buffer, uint16_t bufSize)
 {
         bool returnVal = false;
 
-        if (bufSize >= 5)
+        if (bufSize >= 3)
         {
                 uint IX = 0;
                 chargerValues[index][BATTERY_TEMP] = buffer[IX++];
@@ -256,6 +264,25 @@ static bool readTemps(uint16_t index, uint16_t *buffer, uint16_t bufSize)
         setErrorCnt(0xFF00FF,8, returnVal);        
         return returnVal;
 }
+
+static bool readExternalTemps(uint16_t index, uint16_t *buffer, uint16_t bufSize)
+{
+        bool returnVal = false;
+
+        if (bufSize >= 1)
+        {
+                uint IX = 0;                
+                chargerValues[index][BATTERY_EXTERNAL_TEMP] = buffer[IX++];
+                DBG_SECT(
+                    rprintD("Battery external Temp: ");
+                    rprintDln(chargerValues[index][BATTERY_EXTERNAL_TEMP]);)
+                returnVal = true;
+        }
+
+        //setErrorCnt(0xFF00FF,8, returnVal);        
+        return returnVal;
+}
+
 
 static bool readStates(uint16_t index, uint16_t *buffer, uint16_t bufSize)
 {
@@ -362,6 +389,7 @@ void chargeControllerThradFunc(void *)
                         sendRequest();
                         break;
                 case R_TEMPS:
+                case R_EXT_TEMPS:
                         if(iteration==0) {
                                 sendRequest();
                         } else {

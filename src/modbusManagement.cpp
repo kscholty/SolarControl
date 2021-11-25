@@ -84,8 +84,8 @@ void modbusReconnect()
   //Config Modbus IP
   modbusServer->server(502);
   modbusServer->cbEnable(true);
-  modbusServer->addHreg(0, 0, REG_NUM_REGISTERS);
-  modbusServer->onGet(HREG(0), getter, REG_NUM_REGISTERS);
+  modbusServer->addIreg(0, 0, REG_NUM_REGISTERS);
+  modbusServer->onGet(IREG(0), getter, REG_NUM_REGISTERS);
   modbusServer->onConnect(onConnect);
   modbusServer->onDisconnect(onDisConnect);
 

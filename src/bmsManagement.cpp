@@ -280,7 +280,10 @@ void bmsEnable(bool on) {
 
 void bmsLoop(void *)
 {
+    #define FORCEINTERVAL  150000
     TickType_t previousTime = xTaskGetTickCount();
+    unsigned long lastRead = 0;
+    readBasicData();
     while (true)
     {
         vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(bmsUpdateIntervalMilis));
@@ -290,6 +293,14 @@ void bmsLoop(void *)
             // Query the BMS
             readBasicData();
             readCellValues();         
+        } else {
+            // Once in a while we update the basic data nevertheless.
+            unsigned long now = previousTime * portTICK_PERIOD_MS; 
+            if(now - lastRead > FORCEINTERVAL) {
+                if(readBasicData()) {
+                    lastRead = now;
+                }
+            }
         }
     }
 }
