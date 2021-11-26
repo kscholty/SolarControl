@@ -251,7 +251,9 @@ static bool readTemps(uint16_t index, uint16_t *buffer, uint16_t bufSize)
                 chargerValues[index][CONTROLLER_POWER_COMP_TEMP] = buffer[IX++];
                 DBG_SECT(
                     rprintD("Controller Power component Temp: ");
-                    rprintDln(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);)                
+                    rprintDln(chargerValues[index][CONTROLLER_POWER_COMP_TEMP]);) 
+
+                returnVal = true;
         }
 
         setErrorCnt(0xFF00FF,8, returnVal);        
