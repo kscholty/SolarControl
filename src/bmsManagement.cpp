@@ -29,6 +29,7 @@ BmsBasicInfo_t *gBmsBasicInfo = 0;
 BmsCellInfo_t *gBmsCellInfo = 0;
 
 bool gBmsDisconnect = true;
+bool gBmsUpdated = false;
 
 static uint8_t messagebuffer[MAXMESSAGESIZE];
 
@@ -53,12 +54,11 @@ struct MessageHeader_t
 // It's connected to an RS485 bus. 
 // It is shared with the Charge controllers therefore we have to 
 // get a mutex that protects the serial line from parallel access.
-
-
 size_t readAnswerMessage()
 {
+    #define TIMEOUT 1000
     size_t toRead,read;
-    int repeat = 2;
+    unsigned long starttime = millis();
 
     uint8_t messagePointer = 0;
     MessageHeader_t *header =(MessageHeader_t*)messagebuffer;
@@ -69,7 +69,8 @@ size_t readAnswerMessage()
         read = Serial2.readBytes(messagebuffer + messagePointer, toRead);
         toRead -= read;
         messagePointer += read;        
-    } while (toRead && read );
+    
+    } while (toRead && (millis() - starttime) < TIMEOUT);
 
     if(toRead != 0 || header->start != STARTBYTE) {
         // We didn't read anything or the answer has the wrong format
@@ -119,6 +120,7 @@ static bool parseBasicInfo(BmsBasicInfo_t* data, uint8_t datasize) {
         gBmsBasicInfo = (BmsBasicInfo_t*)malloc(datasize);
     }
     memcpy(gBmsBasicInfo,data,datasize);
+    gBmsUpdated = true;
     return true;
 }
 
@@ -231,6 +233,7 @@ void printBasicInfo() //DBUG_ON all data to uart
 
 static bool readBasicData()
 {
+    bool result = false;
     static uint8_t request[7] = {0xdd, 0xa5, 0x03, 0x00, 0xff, 0xfd, 0x77};
 
 #if 0
@@ -241,27 +244,27 @@ static bool readBasicData()
     processMessage(result, sizeof(result));
 #endif
     // Uncomment this in real software
-    handleRequest(request, 7);
+    result = handleRequest(request, 7);
 
 DBG_SECT(
     if (Debug.isActive(Debug.DEBUG)) {
         printBasicInfo();
     }
 )
-    return false;
+    return result;
 }
 
 static bool readCellValues()
 {
     static uint8_t request[7] = {0xdd, 0xa5, 0x4, 0x0, 0xff, 0xfc, 0x77};
-
+    bool result = 0;
 #if 0
     static uint8_t result[] = {0xDD, 0x04, 0x00, 0x1E, 0x0F, 0x66, 0x0F, 0x63, 0x0F, 0x63, 0x0F, 0x64, 0x0F, 0x3E, 0x0F, 0x63, 0x0F, 0x37,
                                0x0F, 0x5B, 0x0F, 0x65, 0x0F, 0x3B, 0x0F, 0x63, 0x0F, 0x63, 0x0F, 0x3C, 0x0F, 0x66, 0x0F, 0x3D, 0xF9, 0xF9, 0x77};
     memcpy(messagebuffer, result, sizeof(result));
     processMessage(result, sizeof(result));
 #endif
-    handleRequest(request, 7);
+    result = handleRequest(request, 7);
 
 DBG_SECT(
     if (Debug.isActive(Debug.DEBUG)) {
@@ -271,7 +274,7 @@ DBG_SECT(
     }
     }
 )
-    return false;
+    return result;
 }
 
 void bmsEnable(bool on) {
@@ -294,9 +297,10 @@ void bmsLoop(void *)
             readBasicData();
             readCellValues();         
         } else {
-            // Once in a while we update the basic data nevertheless.
+            // Once in a while we update the basic data nevertheless.            
             unsigned long now = previousTime * portTICK_PERIOD_MS; 
             if(now - lastRead > FORCEINTERVAL) {
+                DEBUG_I("Forcing BMS basic data update\n");
                 if(readBasicData()) {
                     lastRead = now;
                 }

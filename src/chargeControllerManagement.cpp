@@ -154,7 +154,7 @@ static bool sendRequest()
                 {
                         Serial2.updateBaudRate(BAUDRATE);
                 }
-                
+                while (Serial2.read() != -1); // Flush the serial....
                 changeState(TASK);
                 if (!modbusClient.readIreg(chargerModbusAdresses[currentIndex], state->offset, recvBuffer, state->numRegisters, hRegCallback))
                 {
@@ -383,14 +383,17 @@ void chargeControllerThradFunc(void *)
                 // Request has been sent. Wait for answers;
                 // Next state will be set by the callback function.
                 case TASK:
-                        modbusClient.task();
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                        modbusClient.task();                        
                         break;
                 case R_PV_BAT:        
+                        vTaskDelay(pdMS_TO_TICKS(100));                        
                         sendRequest();
                         break;
                 case R_TEMPS:
                 case R_EXT_TEMPS:
                         if(iteration==0) {
+                                vTaskDelay(pdMS_TO_TICKS(100));
                                 sendRequest();
                         } else {
                                 changeState(states[currentState].nextState);
@@ -398,6 +401,7 @@ void chargeControllerThradFunc(void *)
                         break;
                 case R_STATES:
                         if(iteration==1) {
+                                vTaskDelay(pdMS_TO_TICKS(100));
                                 sendRequest();
                         } else {
                                 changeState(states[currentState].nextState);

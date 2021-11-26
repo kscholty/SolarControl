@@ -65,6 +65,7 @@ extern BmsBasicInfo_t *gBmsBasicInfo;
 extern BmsCellInfo_t *gBmsCellInfo;
 
 extern bool gBmsDisconnect;
+extern bool gBmsUpdated;
 
 
 extern void bmsSetup();

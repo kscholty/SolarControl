@@ -150,11 +150,11 @@ void blynkUpdateInverter()
 void blynkUpdateBattery()
 {
 
-if(!gBmsBasicInfo || gBmsDisconnect) {
+if(!gBmsBasicInfo || !gBmsUpdated) {
     return;
 }
 
-
+gBmsUpdated = false;
 Blynk.virtualWrite(BLYNK_VPIN_TOTALVOLTAGE,(float)gBmsBasicInfo->getTotalVoltage() / 100.0);
 Blynk.virtualWrite(BLYNK_VPIN_CURRENT, (float)gBmsBasicInfo->getcurrent() / 100.0);
 Blynk.virtualWrite(BLYNK_VPIN_CAPACITYREMAIN, (float)gBmsBasicInfo->getcapacityRemain() / 100);
@@ -195,7 +195,7 @@ if(!gBmsDisconnect) {
 static uint16_t oldBalancingStatus = 0;
 uint16_t balanceStatus = gBmsBasicInfo->getbalanceStatusLow();
 //BALANCE_STATUS(VAL,CELL) (((VAL)>>(CELL)) & 0x1)
-if(gBmsCellInfo) {
+if(gBmsCellInfo && !gBmsDisconnect) {
     uint16_t minV=UINT16_MAX;
     uint16_t maxV = 0;
     for(uint i = 0;i<gBmsCellInfo->getNumOfCells();++i) {
