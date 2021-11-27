@@ -6,56 +6,93 @@ extern char gBmsDummyValue[STRING_LEN];
 extern char gBmsUpdateIntervalValue[NUMBER_LEN];
 
 #pragma pack(push,1)
+
+struct Alarms_t
+{
+    int Lowcapacity : 1;
+    int BmsOverTemperature : 1;
+    int ChargingOvervoltage : 1;
+    int DischargingUndervoltage : 1;
+    int BatteryOverTemperature : 1;
+    int ChargingOvercurrent : 1;
+    int DischargingOvercurrent : 1;
+    int CellPressureDifference : 1;
+    int OvertemperatureAlarmBatteryBox : 1;
+    int BatteryLowTemperature : 1;
+    int CellOvervoltage : 1;
+    int CellUndervoltage : 1;
+    int Protection309_A : 1;
+    int Protection309_B : 1;
+    int Reserved : 2;
+    int Reserved2 : 1;
+};
+
+union AlarmStorage_t {
+    Alarms_t alarms;
+    uint16_t rawValue; 
+};
+
+struct BatteryStatus_t
+{
+    int ChargingEnabled : 1;
+    int DischargingEnabled : 1;
+    int BalancerEnabled : 1;
+    int BatteryDropped : 1;
+    int reseved : 12;
+};
+
+union BatteryStatusStorage_t {
+    BatteryStatus_t status;
+    uint16_t rawValue;
+};
 struct BmsBasicInfo_t
 {
     public:
-    uint16_t getTotalVoltage() {return __builtin_bswap16(totalVoltage);} // unit 10mV
-	int16_t getcurrent() {return __builtin_bswap16(current);}   // unit 10mA
-	uint16_t getcapacityRemain() {return __builtin_bswap16(capacityRemain);} // unit 10mAh
-    uint16_t getnominalCapacity() {return __builtin_bswap16(nominalCapacity);} // unit 10mAh
-	uint16_t getcycleLife() {return __builtin_bswap16(cycleLife);} 
-    uint16_t getproductDate() {return __builtin_bswap16(productDate);}
-    uint16_t getbalanceStatusLow() {return __builtin_bswap16(balanceStatusLow);}
-    uint16_t getbalanceStatusHigh() {return __builtin_bswap16(balanceStatusHigh);}
-    uint16_t getprotectionStatus() {return __builtin_bswap16(protectionStatus);}
+    uint16_t getTotalVoltage() {return totalVoltage;} // unit 10mV
+	int16_t getcurrent() {return current;}   // unit 10mA
+	uint16_t getcapacityRemain() {return capacityRemain;} // unit 10mAh
+    uint16_t getnominalCapacity() {return nominalCapacity;} // unit 10mAh
+	uint16_t getcycleLife() {return cycleLife;} 
+    uint16_t getproductDate() {return productDate;}
+    Alarms_t getprotectionStatus() {return alarmsStatus.alarms;}
+    BatteryStatus_t getStatus() { return batteryStatus.status;}
     uint8_t getversion() {return version;}
-    uint8_t getstateOfCharge(){ return stateOfCharge;} // in percent
-    uint8_t getfetControlStatus() {return fetControlStatus;}
+    uint8_t getstateOfCharge(){ return stateOfCharge;} // in percent    
     uint8_t getcellsInSeries() {return cellsInSeries;}
     uint8_t getnumTempSensors() {return numTempSensors;}
     int16_t getTemp(unsigned int i) {
         if(i<numTempSensors) {
-            return __builtin_bswap16(temps[i])-2731;
+            return temps[i];
         } else { return -2731;} 
     }
 
-    size_t size() { return sizeof(*this)+getnumTempSensors()*2;}
+    size_t size() { return sizeof(*this);}
     
-    private:
 	uint16_t totalVoltage; // unit 10mV
-	int16_t current;   // unit 10mA
+	int32_t current;   // unit 10mA
 	uint16_t capacityRemain; // unit 10mAh
     uint16_t nominalCapacity; // unit 10mAh
 	uint16_t cycleLife; 
-    uint16_t productDate;
-    uint16_t balanceStatusLow;
-    uint16_t balanceStatusHigh;
-    uint16_t protectionStatus;
+    uint16_t productDate;    
+    AlarmStorage_t alarmsStatus;
     uint8_t version;
     uint8_t stateOfCharge; // in percent
-    uint8_t fetControlStatus;
+    BatteryStatusStorage_t batteryStatus;
     uint8_t cellsInSeries;
     uint8_t numTempSensors;
-    uint16_t temps[0];	// Its in 0,1 Kelvin (calculate (value-2731)/10 = deg C)
+    int16_t temps[3];	
 } ;
 
 struct BmsCellInfo_t
 {
+    
     public:
-    uint8_t getNumOfCells() {return numOfCells>>1;}
-    uint16_t getCellVolt(unsigned int i) { if (i<numOfCells) {return __builtin_bswap16(cellVolt[i]);} else { return 0;} }
+    uint8_t getNumOfCells() {return numCells;}
+    uint16_t getCellVolt(size_t i) { if (i<getNumOfCells()) { return cellVolt[i];} else { return 0;} }
+    void setVoltage(size_t i, uint16_t value) { if(i<numCells) cellVolt[i] = value; }
+    void setNumCells(size_t count) { numCells = count;}
     private:
-	uint8_t numOfCells;
+	uint8_t numCells;
 	uint16_t cellVolt[0]; // This in mV, hence devide it by 1000
 } ;
 
