@@ -1,12 +1,7 @@
+
 #pragma once
 
-#define JKBMS 1
-#include "common.h"
-#include "Battery.h"
-
-extern char gBmsDummyValue[STRING_LEN];
-extern char gBmsUpdateIntervalValue[NUMBER_LEN];
-extern BMS_t *gBms;
+namespace BMS {
 
 #pragma pack(push,1)
 
@@ -48,29 +43,30 @@ union BatteryStatusStorage_t {
     BatteryStatus_t status;
     uint16_t rawValue;
 };
+
 struct BmsBasicInfo_t
 {
     public:
-    uint16_t getTotalVoltage() {return totalVoltage;} // unit 10mV
-	int16_t getcurrent() {return current;}   // unit 10mA
-	uint16_t getcapacityRemain() {return capacityRemain;} // unit 10mAh
-    uint16_t getnominalCapacity() {return nominalCapacity;} // unit 10mAh
-	uint16_t getcycleLife() {return cycleLife;} 
-    uint16_t getproductDate() {return productDate;}
-    uint16_t getfetControlStatus() { return (0x0 | (batteryStatus.status.DischargingEnabled<<1) | batteryStatus.status.ChargingEnabled );}
-    Alarms_t getprotectionStatus() {return alarmsStatus.alarms;}
-    BatteryStatus_t getStatus() { return batteryStatus.status;}
-    uint8_t getversion() {return version;}
-    uint8_t getstateOfCharge(){ return stateOfCharge;} // in percent    
-    uint8_t getcellsInSeries() {return cellsInSeries;}
-    uint8_t getnumTempSensors() {return numTempSensors;}
-    int16_t getTemp(unsigned int i) {
+    uint16_t getTotalVoltage() const {return totalVoltage;} // unit 10mV
+	int16_t getcurrent() const {return current;}   // unit 10mA
+	uint16_t getcapacityRemain() const {return capacityRemain;} // unit 10mAh
+    uint16_t getnominalCapacity() const {return nominalCapacity;} // unit 10mAh
+	uint16_t getcycleLife() const {return cycleLife;} 
+    uint16_t getproductDate() const {return productDate;}
+    uint16_t getfetControlStatus() const { return (0x0 | (batteryStatus.status.DischargingEnabled<<1) | batteryStatus.status.ChargingEnabled );}
+    Alarms_t getprotectionStatus() const {return alarmsStatus.alarms;}
+    BatteryStatus_t getStatus() const { return batteryStatus.status;}
+    uint8_t getversion() const {return version;}
+    uint8_t getstateOfCharge() const { return stateOfCharge;} // in percent    
+    uint8_t getcellsInSeries() const {return cellsInSeries;}
+    uint8_t getnumTempSensors() const {return numTempSensors;}
+    int16_t getTemp(unsigned int i) const {
         if(i<numTempSensors) {
             return temps[i];
         } else { return -2731;} 
     }
 
-    size_t size() { return sizeof(*this);}
+    size_t size() const { return sizeof(*this);}
     
 	uint16_t totalVoltage; // unit 10mV
 	int32_t current;   // unit 10mA
@@ -91,8 +87,8 @@ struct BmsCellInfo_t
 {
     
     public:
-    uint8_t getNumOfCells() {return numCells;}
-    uint16_t getCellVolt(size_t i) { if (i<getNumOfCells()) { return cellVolt[i];} else { return 0;} }
+    uint8_t getNumOfCells() const {return numCells;}
+    uint16_t getCellVolt(size_t i) const { if (i<getNumOfCells()) { return cellVolt[i];} else { return 0;} }
     void setVoltage(size_t i, uint16_t value) { if(i<numCells) cellVolt[i] = value; }
     void setNumCells(size_t count) { numCells = count;}
     private:
@@ -102,9 +98,4 @@ struct BmsCellInfo_t
 
 #pragma pack(pop)
 
-extern bool gBmsDisconnect;
-extern bool gBmsUpdated;
-
-
-extern void bmsSetup();
-extern void bmsEnable(bool on);
+}

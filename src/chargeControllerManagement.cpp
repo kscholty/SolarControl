@@ -87,8 +87,7 @@ static unsigned int calculateChargerIds() {
 }
 
 static void chargeControllerSetupController()
-{        
-        Serial2.begin(BAUDRATE);
+{                
         modbusClient.begin(&Serial2);    
         modbusClient.master();    
         for (int i = 0; i < NUM_CHARGERS; ++i)

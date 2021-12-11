@@ -150,28 +150,40 @@ void blynkUpdateInverter()
 void blynkUpdateBattery()
 {
 
-if(!gBmsBasicInfo || !gBmsUpdated) {
+if(!gBms || !gBmsUpdated) {
     return;
 }
 
 gBmsUpdated = false;
-Blynk.virtualWrite(BLYNK_VPIN_TOTALVOLTAGE,(float)gBmsBasicInfo->getTotalVoltage() / 100.0);
-Blynk.virtualWrite(BLYNK_VPIN_CURRENT, (float)gBmsBasicInfo->getcurrent() / 100.0);
-Blynk.virtualWrite(BLYNK_VPIN_CAPACITYREMAIN, (float)gBmsBasicInfo->getcapacityRemain() / 100);
-Blynk.virtualWrite(BLYNK_VPIN_NOMINALCAPACITY,(float)gBmsBasicInfo->getnominalCapacity() /100);
-Blynk.virtualWrite(BLYNK_VPIN_CYCLELIFE,gBmsBasicInfo->getcycleLife());
-Blynk.virtualWrite(BLYNK_VPIN_STATEOFCHARGE, gBmsBasicInfo->getstateOfCharge());
-Blynk.virtualWrite(BLYNK_VPIN_FETSTATUSCHARGE, (gBmsBasicInfo->getfetControlStatus() & 0x01)*255);
-Blynk.virtualWrite(BLYNK_VPIN_FETSTATUSDISCHARGE, ((gBmsBasicInfo->getfetControlStatus() >> 1) & 0x01)*255);
-if(gBmsBasicInfo->getnumTempSensors() > 0) {
-    Blynk.virtualWrite( BLYNK_VPIN_TEMP_1, (float)gBmsBasicInfo->getTemp(0) / 10);
+const BMS::BmsBasicInfo_t &bmsBasicInfo = gBms->basicInfo();
+Blynk.virtualWrite(BLYNK_VPIN_TOTALVOLTAGE,(float)bmsBasicInfo.getTotalVoltage() / 100.0);
+Blynk.virtualWrite(BLYNK_VPIN_CURRENT, (float)bmsBasicInfo.getcurrent() / 100.0);
+Blynk.virtualWrite(BLYNK_VPIN_CAPACITYREMAIN, (float)bmsBasicInfo.getcapacityRemain() / 100);
+Blynk.virtualWrite(BLYNK_VPIN_NOMINALCAPACITY,(float)bmsBasicInfo.getnominalCapacity() /100);
+Blynk.virtualWrite(BLYNK_VPIN_CYCLELIFE,bmsBasicInfo.getcycleLife());
+Blynk.virtualWrite(BLYNK_VPIN_STATEOFCHARGE, bmsBasicInfo.getstateOfCharge());
+Blynk.virtualWrite(BLYNK_VPIN_FETSTATUSCHARGE, (bmsBasicInfo.getfetControlStatus() & 0x01)*255);
+Blynk.virtualWrite(BLYNK_VPIN_FETSTATUSDISCHARGE, ((bmsBasicInfo.getfetControlStatus() >> 1) & 0x01)*255);
+if(bmsBasicInfo.getnumTempSensors() > 0) {
+    Blynk.virtualWrite( BLYNK_VPIN_TEMP_1, (float)bmsBasicInfo.getTemp(0) / 10);
 }
 
-if(gBmsBasicInfo->getnumTempSensors() > 1) {
-    Blynk.virtualWrite( BLYNK_VPIN_TEMP_2, (float)gBmsBasicInfo->getTemp(1) / 10);
+if(bmsBasicInfo.getnumTempSensors() > 1) {
+    Blynk.virtualWrite( BLYNK_VPIN_TEMP_2, (float)bmsBasicInfo.getTemp(1) / 10);
 }
 
-uint16_t status = gBmsBasicInfo->getprotectionStatus();
+#if JKBMS
+const BMS::Alarms_t status = bmsBasicInfo.getprotectionStatus();
+Blynk.virtualWrite(BLYNK_VPIN_OVCELL,status.CellOvervoltage*255);
+Blynk.virtualWrite(BLYNK_VPIN_UVCELL,status.CellUndervoltage*255);
+Blynk.virtualWrite(BLYNK_VPIN_OVBATTERY,status.ChargingOvervoltage*255);
+Blynk.virtualWrite(BLYNK_VPIN_UVBATTERY,status.DischargingUndervoltage*255);
+Blynk.virtualWrite(BLYNK_VPIN_OTCHARGE,status.BmsOverTemperature*255);
+Blynk.virtualWrite(BLYNK_VPIN_OTDISCHARGE,status.BmsOverTemperature*255);
+Blynk.virtualWrite(BLYNK_VPIN_OCCHARGE,status.ChargingOvercurrent*255);
+Blynk.virtualWrite(BLYNK_VPIN_OCDISCHARGE,status.DischargingOvercurrent*255);
+#else 
+uint16_t status = bmsBasicInfo.getprotectionStatus();
 #define B(NUM) ((status>>NUM) & 1)
 
 Blynk.virtualWrite(BLYNK_VPIN_OVCELL,B(0)*255);
@@ -184,6 +196,7 @@ Blynk.virtualWrite(BLYNK_VPIN_OCCHARGE,B(8)*255);
 Blynk.virtualWrite(BLYNK_VPIN_OCDISCHARGE,B(9)*255);
 
 #undef B
+#endif
 
 Blynk.virtualWrite(BLYNK_VPIN_BLE_CONNECTED,!gBmsDisconnect);
 if(!gBmsDisconnect) {
@@ -192,16 +205,21 @@ if(!gBmsDisconnect) {
     Blynk.setProperty(BLYNK_VPIN_BLE_CONNECTED,"color",BLYNK_RED);
 }
 
+
+#if !JKBMS
 static uint16_t oldBalancingStatus = 0;
-uint16_t balanceStatus = gBmsBasicInfo->getbalanceStatusLow();
+uint16_t balanceStatus = bmsBasicInfo->getbalanceStatusLow();
+#endif
 //BALANCE_STATUS(VAL,CELL) (((VAL)>>(CELL)) & 0x1)
-if(gBmsCellInfo && !gBmsDisconnect) {
+if(gBms && !gBmsDisconnect) {
     uint16_t minV=UINT16_MAX;
     uint16_t maxV = 0;
-    for(uint i = 0;i<gBmsCellInfo->getNumOfCells();++i) {
-        maxV = max(maxV,gBmsCellInfo->getCellVolt(i));
-        minV = min(minV,gBmsCellInfo->getCellVolt(i));
-        Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)gBmsCellInfo->getCellVolt(i)/1000.0f);
+    const BMS::BmsCellInfo_t &bmsCellInfo = gBms->cellInfo();
+    for(uint i = 0;i<bmsCellInfo.getNumOfCells();++i) {
+        maxV = max(maxV,bmsCellInfo.getCellVolt(i));
+        minV = min(minV,bmsCellInfo.getCellVolt(i));
+        Blynk.virtualWrite( BLYNK_VPIN_CELL_VOLTAGE(i), (float)bmsCellInfo.getCellVolt(i)/1000.0f);
+#if !JKBMS        
         if(BALANCE_STATUS(oldBalancingStatus,i) != BALANCE_STATUS(balanceStatus,i)) {
             char txt[8];
             if(BALANCE_STATUS(balanceStatus,i)) {
@@ -211,14 +229,15 @@ if(gBmsCellInfo && !gBmsDisconnect) {
                 sprintf(txt,"%d",i+1);
                 Blynk.setProperty(BLYNK_VPIN_CELL_VOLTAGE(i),"color",BLYNK_GREEN);
             }
-            Blynk.setProperty(BLYNK_VPIN_CELL_VOLTAGE(i),"label",txt);
-            
+            Blynk.setProperty(BLYNK_VPIN_CELL_VOLTAGE(i),"label",txt);           
         }
+#endif         
     }
     Blynk.virtualWrite(BLYNK_VPIN_CELLDIFF,(float)(maxV-minV) / 1000.0f);
 }
+#if !JKBMS
 oldBalancingStatus = balanceStatus;
-
+#endif
 }
 
 void blynkSetup()
