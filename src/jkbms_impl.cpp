@@ -1,4 +1,8 @@
 
+#include "common.h"
+
+#if JKBMS
+
 #include "debugManagement.h"
 #include "JKBms_impl.h"
 
@@ -248,5 +252,6 @@ bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasi
 
 }
     
-
 }
+
+#endif

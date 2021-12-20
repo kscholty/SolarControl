@@ -1,6 +1,5 @@
 #pragma once
 
-#define JKBMS 1
 #include "common.h"
 #include "Battery.h"
 

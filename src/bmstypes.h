@@ -83,17 +83,24 @@ struct BmsBasicInfo_t
     int16_t temps[3];	
 } ;
 
-struct BmsCellInfo_t
-{
-    
+struct  BmsCellInfo_t
+{    
     public:
+    BmsCellInfo_t(): numCells(0), cellVolt(0) {}
+    ~BmsCellInfo_t() { delete [] cellVolt; cellVolt = 0; numCells = 0;}
     uint8_t getNumOfCells() const {return numCells;}
     uint16_t getCellVolt(size_t i) const { if (i<getNumOfCells()) { return cellVolt[i];} else { return 0;} }
     void setVoltage(size_t i, uint16_t value) { if(i<numCells) cellVolt[i] = value; }
-    void setNumCells(size_t count) { numCells = count;}
+    void setNumCells(size_t count) { 
+        if(numCells < count) {
+            delete [] cellVolt; 
+            cellVolt = new uint16_t[count];
+        }
+        numCells = count;
+    }
     private:
 	uint8_t numCells;
-	uint16_t cellVolt[0]; // This in mV, hence devide it by 1000
+	uint16_t *cellVolt; // This in mV, hence devide it by 1000
 } ;
 
 #pragma pack(pop)
