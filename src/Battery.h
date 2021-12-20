@@ -2,13 +2,13 @@
 #pragma once
 
 #include <HardwareSerial.h>
-
+#include "common.h"
 #include "bmstypes.h"
 
-#if defined(JKBMS)
-#include "JKBms_impl.h"
-#elif defined(QUCCBMS)
-#include "QUCCBms_impl.h"
+#if JKBMS
+#include "jkbms_impl.h"
+#elif QUCCBMS
+#include "quccbms_impl.h"
 #endif
 
 namespace BMS {
@@ -22,7 +22,9 @@ class CBms {
         mLowDelayMs(300000),
         mHighDelayMs(1000),
         mLastLowTrigger(0),
-        mLastHighTrigger(0) {}
+        mLastHighTrigger(0),
+        mBasicInfo(0),
+        mCellInfo(0) {}
   ~CBms(){};
 
   bool setup(){return mBmsImpl.setup();}
@@ -178,8 +180,8 @@ bool CBms<BMS_IMPL>::doLoop() {
 
 }  // namespace BMS
 
-#if defined(JKBMS)
+#if JKBMS
 typedef BMS::CBms<BMS::JKBms> BMS_t;
-#elif defined(QUCCBMS)
+#elif QUCCBMS
 typedef BMS::CBms<BMS::QUCCBms> BMS_t;
 #endif
