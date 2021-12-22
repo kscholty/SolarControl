@@ -36,11 +36,9 @@ public:
     bool processMessage(const uint8_t *answer, size_t messageSize, BmsBasicInfo_t *basicInfo, BmsCellInfo_t *cellInfo) ;
 protected:
 
-    bool parseCellInfo(const MessageHeader_t *message, size_t dataSize, BmsCellInfo_t *cellInfo) ;
-    bool parseBasicInfo(const MessageHeader_t *message, size_t dataSize,BmsBasicInfo_t *basicInfo) ;
+    bool parseCellInfo(const MessageHeader_t *message, size_t dataSize, BmsCellInfo_t *cellInfo) const ;
+    bool parseBasicInfo(const MessageHeader_t *message, size_t dataSize,BmsBasicInfo_t *basicInfo) const ;
 
-
-    unsigned int mProtocolVersion;
 
 };
 

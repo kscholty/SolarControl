@@ -36,7 +36,7 @@ struct BatteryStatus_t
     int DischargingEnabled : 1;
     int BalancerEnabled : 1;
     int BatteryDropped : 1;
-    int reseved : 12;
+    int reserved : 12;
 };
 
 union BatteryStatusStorage_t {
@@ -47,6 +47,7 @@ union BatteryStatusStorage_t {
 struct BmsBasicInfo_t
 {
     public:
+    BmsBasicInfo_t() { memset(this,0,sizeof(*this));}
     uint16_t getTotalVoltage() const {return totalVoltage;} // unit 10mV
 	int16_t getcurrent() const {return current;}   // unit 10mA
 	uint16_t getcapacityRemain() const {return capacityRemain;} // unit 10mAh
@@ -60,6 +61,8 @@ struct BmsBasicInfo_t
     uint8_t getstateOfCharge() const { return stateOfCharge;} // in percent    
     uint8_t getcellsInSeries() const {return cellsInSeries;}
     uint8_t getnumTempSensors() const {return numTempSensors;}
+    uint16_t getbalanceStatusLow() const {return balanceStatusLow;}
+    uint16_t getbalanceStatusHigh() const {return balanceStatusHigh;}
     int16_t getTemp(unsigned int i) const {
         if(i<numTempSensors) {
             return temps[i];
@@ -80,6 +83,8 @@ struct BmsBasicInfo_t
     BatteryStatusStorage_t batteryStatus;
     uint8_t cellsInSeries;
     uint8_t numTempSensors;
+    uint16_t balanceStatusLow;
+    uint16_t balanceStatusHigh;
     int16_t temps[3];	
 } ;
 

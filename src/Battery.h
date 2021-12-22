@@ -22,9 +22,8 @@ class CBms {
         mLowDelayMs(300000),
         mHighDelayMs(1000),
         mLastLowTrigger(0),
-        mLastHighTrigger(0),
-        mBasicInfo(0),
-        mCellInfo(0) {}
+        mLastHighTrigger(0)
+       {}
   ~CBms(){};
 
   bool setup(){return mBmsImpl.setup();}
