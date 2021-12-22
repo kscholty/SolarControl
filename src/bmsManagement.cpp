@@ -14,7 +14,7 @@ char gBmsUpdateIntervalValue[NUMBER_LEN] = "3000";
 char gBmsDummyValue[STRING_LEN];
 
 
-bool gBmsDisconnect = false;
+bool gBmsDisconnect = true;
 bool gBmsUpdated = false;
 
 static TaskHandle_t taskId;
@@ -31,6 +31,7 @@ static bool bmsSetupBms() {
    if(bmsUpdateShortIntervalMilis < 500) {
        bmsUpdateShortIntervalMilis = 3000;
    }
+   bmsUpdateLongIntervalMilis = 3*bmsUpdateShortIntervalMilis;
    gBms = new BMS_t(Serial2, gSerial2Mutex);
    if(gBms) {
        gBms->setLowFrequencyDelay(bmsUpdateLongIntervalMilis);

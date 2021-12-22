@@ -10,6 +10,7 @@ namespace BMS {
 class QUCCBms {
 
     protected:
+    
 #pragma pack(push,1)
 
 struct MessageHeader_t

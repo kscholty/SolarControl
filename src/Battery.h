@@ -138,7 +138,7 @@ size_t CBms<BMS_IMPL>::readAnswerMessage(uint8_t **answer) {
     debugW("BMS: Message too large for buffer %d\n", toRead);
     return 0;
   } else {
-    debugI("Body size to read:%d \n", toRead);
+    debugD("Body size to read:%d \n", toRead);
   }
 
   do {
@@ -151,8 +151,8 @@ size_t CBms<BMS_IMPL>::readAnswerMessage(uint8_t **answer) {
     debugW("BMS: Still to read %d bytes in body.\n", toRead);
   }
 
-  if (Debug.isActive(Debug.INFO)) {
-    debugI("BMS: Message size is %d\n", messagePointer);
+  if (Debug.isActive(Debug.DEBUG)) {
+    debugD("BMS: Message size is %d\n", messagePointer);
     for (int i = 0; i < messagePointer; ++i) {
       Debug.printf("0x%02x ", messagebuffer[i]);
     }

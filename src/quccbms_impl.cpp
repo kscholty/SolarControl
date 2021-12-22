@@ -132,7 +132,7 @@ bool QUCCBms::processMessage(const uint8_t *message, size_t length, BmsBasicInfo
 
 bool QUCCBms::parseCellInfo(const MessageHeader_t *data, size_t length, BmsCellInfo_t *cellInfo) const {
     const MessageHeader_t *header = (const MessageHeader_t*)data;
-    const QUCCCellInfo_t *cellData = (const QUCCCellInfo_t*)header->data;
+    const QUCCCellInfo_t *cellData = (const QUCCCellInfo_t*)&header->dataLen;
 
     size_t numCells = cellData->getNumOfCells();
    
