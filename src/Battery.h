@@ -21,8 +21,8 @@ class CBms {
         mStreamMutex(aMutex),
         mLowDelayMs(300000),
         mHighDelayMs(1000),
-        mLastLowTrigger(0),
-        mLastHighTrigger(0)
+        mLastLowTrigger(1),
+        mLastHighTrigger(1)
        {}
   ~CBms(){};
 
@@ -168,12 +168,12 @@ bool CBms<BMS_IMPL>::doLoop() {
   if (now - mLastLowTrigger > mLowDelayMs) {
     res = readLowFrequentData();
     mLastLowTrigger = now;
-  } else {
-    if (now - mLastHighTrigger > mHighDelayMs) {
-      res |= readHighFrequentData();
-      mLastHighTrigger = now;
-    }
   }
+  if (now - mLastHighTrigger > mHighDelayMs) {
+    res |= readHighFrequentData();
+    mLastHighTrigger = now;
+  }
+
   return res;
 }
 

@@ -64,7 +64,7 @@ static uint8_t pinValue;
 static bool useInverterOutput = true;
 
 //Specify the links and initial tuning parameters
-double Kp=0.46, Ki=0.25, Kd=0.7;
+double Kp=0.32, Ki=0.3, Kd=0.1;
 static PID aPID(&currentPowerUsed, &gInverterTarget, &inverterOffset, Kp, Ki, Kd, REVERSE);
 
 void inverterActivatePidValues() {
