@@ -7,6 +7,8 @@
 #include "inverterManagement.h"
 #include "adc.h"
 #include "modbusManagement.h"
+#include "bmsManagement.h"
+#include "chargeControllerManagement.h"
 
 #if DBUG_ON
 #include "mqttmanagement.h"
@@ -131,7 +133,14 @@ static void inverterSetupInverter()
 
 void inverterSetRealTarget()
 {
-    realTarget = max((double)gExcessTarget,gInverterTarget);
+    if( (gBms->basicInfo().getTotalVoltage() < 4900) && (gCurrentPowerCreated > 80)) {
+        // If we are below 49V, dont use more than the PV produces
+        // If this is more than required, put the rest into the battery.
+        realTarget = min((double)gCurrentPowerCreated,gInverterTarget);
+    } else {
+        realTarget = max((double)gExcessTarget,gInverterTarget);
+    }
+    
 }
 
 void gInverterGridPowerUpdated()
