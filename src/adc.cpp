@@ -121,14 +121,14 @@ bool adcInit() {
       I2S_COMM_FORMAT_I2S,
       ESP_INTR_FLAG_LEVEL1,
       ADC_BUFFER_COUNT,
-      1024 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/,
+      READ_LEN / 2 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/,
       true,
       true,
       0};
 
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(I2S_ADC_CURRENT_CHANNEL, ADC_ATTEN_DB_11);
-  adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_2_5);
+  adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_11);
 
   // install and start i2s driver
   i2s_driver_install(I2S_NUM, &i2s_config, ADC_BUFFER_COUNT,
