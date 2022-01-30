@@ -133,7 +133,7 @@ static void inverterSetupInverter()
 
 void inverterSetRealTarget()
 {
-    if( (gBms->basicInfo().getTotalVoltage() < 4900) && (gCurrentPowerCreated > 80)) {
+    if( (gBms->basicInfo().getTotalVoltage() < 5000) && (gCurrentPowerCreated > 80)) {
         // If we are below 49V, dont use more than the PV produces
         // If this is more than required, put the rest into the battery.
         realTarget = min((double)gCurrentPowerCreated,gInverterTarget);
@@ -164,7 +164,7 @@ void gInverterGridPowerUpdated()
     {
         aPID.SetTunings(Kp / 2, Ki, Kd);
     }
-    
+    aPID.Compute();
     inverterSetRealTarget();
     
 }
@@ -182,16 +182,7 @@ static void inverterLoop()
 {
     TickType_t previousTime = xTaskGetTickCount();
     while (true)
-    {
-
-        if (millis() - lastGridUpdateReceived > inverterTimeout)
-        {
-            // MQTT has a problem it seems...
-            // So let's go to our  default output
-            gInverterTarget = inverterEmergencyTarget;
-
-            DEBUG_W("Inverter detected timeout. MQTT not running");
-        }
+    {        
         // Seems to work fine...
         inverterUnlock();
 
@@ -203,7 +194,19 @@ static void inverterLoop()
                 // Let's try to match the output power to the the target
                 ReadInverter();
                 
-                aPID.Compute();
+                if (millis() - lastGridUpdateReceived > inverterTimeout)
+                {
+                    // MQTT has a problem it seems...
+                    // So let's go to our  default output
+                    gInverterTarget = inverterEmergencyTarget;
+                    inverterSetRealTarget();
+
+                    // Come back here in 500ms if no update occured inbetween to update the 
+                    // realTarget.
+                    lastGridUpdateReceived = millis() + 500 - inverterTimeout;                     
+                    //DEBUG_W("Inverter detected timeout. MQTT not running");
+                } 
+
                 if (gInverterPower < realTarget)
                 {
                     pinValue = HIGH;
