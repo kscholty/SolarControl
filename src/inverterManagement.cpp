@@ -193,7 +193,7 @@ static void inverterLoop()
                 // Here the whole magic happenes :-)
                 // Let's try to match the output power to the the target
                 ReadInverter();
-                
+                aPID.Compute();
                 if (millis() - lastGridUpdateReceived > inverterTimeout)
                 {
                     // MQTT has a problem it seems...
