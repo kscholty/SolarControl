@@ -6,10 +6,10 @@
 #include "invertermanagement.h"
 #include "chargeControllerManagement.h"
 #include "bmsManagement.h"
-#include "ssrManagement.h"
 #include "excessControlManagement.h"
 #include "debugManagement.h"
 #include "modbusManagement.h"
+#include "ShellyManagement.h"
 
 
 void setup() {
@@ -26,8 +26,7 @@ void setup() {
   setupExcessManagement(); // Has to be after the inverter
   blynkSetup(); // This should be last, in order to have all data available
   debugSetup();
-  modbusSetup();
-  //ssrSetup();
+  modbusSetup();  
 }
 
 // This one is executed on CPU 1
@@ -37,7 +36,7 @@ void loop() {
   blynkLoop(now);
   modbusLoop(now);
   debugLoop(now);
-  //ssrLoop(now);
+  shellyLoop(now);
 }
 
 

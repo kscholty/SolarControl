@@ -16,7 +16,6 @@
 #include "inverterManagement.h"
 #include "mqttmanagement.h"
 #include "chargeControllerManagement.h"
-#include "ssrManagement.h"
 #include "bmsManagement.h"
 #include "excessControlManagement.h"
 

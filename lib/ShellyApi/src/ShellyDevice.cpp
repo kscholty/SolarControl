@@ -1,8 +1,8 @@
 
 #include <arduino.h>
-#include <Esp8266Wifi.h>
+#include <Wifi.h>
 #include <WiFiClient.h>
-#include <ESP8266HTTPClient.h>
+#include <HTTPClient.h>
 #include "ShellyDevice.h"
 
 

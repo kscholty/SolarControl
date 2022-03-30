@@ -19,10 +19,10 @@
 #include "mqttmanagement.h"
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
-#include "ssrManagement.h"
 #include "bmsManagement.h"
+#include "ShellyManagement.h"
 
-
+static char dummy1[STRING_LEN];
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
 const char wifiInitialApPassword[] = "123456";
 
@@ -80,10 +80,10 @@ IotWebConfNumberParameter charger2Id = IotWebConfNumberParameter("Charger 2 Modb
 IotWebConfNumberParameter chargerUdpateInterval = IotWebConfNumberParameter("Charger upd. interval [s]", "chupd", gChargerUpdateIntervalValue, sizeof(gChargerUpdateIntervalValue), gChargerUpdateIntervalValue);
 
 IotWebConfParameterGroup dayNightGroup = IotWebConfParameterGroup("Values for handling activation of components");
-IotWebConfTextParameter ntpServerNameParam = IotWebConfTextParameter("NTP server", "ntpserver", gNtpServerValue, STRING_LEN,gNtpServerValue);
-IotWebConfTextParameter timezoneParam = IotWebConfTextParameter("Time offset to GMT [h]", "TZ", gTimezoneValue, NUMBER_LEN, gTimezoneValue);
-IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Latitude", "lat", gLatitudeValue, STRING_LEN, gLatitudeValue);
-IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Longitude", "lon", gLongitudeValue, STRING_LEN, gLongitudeValue);
+IotWebConfTextParameter ntpServerNameParam = IotWebConfTextParameter("Dummy1", "dummy1", dummy1, STRING_LEN,dummy1);
+IotWebConfTextParameter timezoneParam = IotWebConfTextParameter("Dummy2", "dummy2", dummy1, NUMBER_LEN, dummy1);
+IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Dummy3", "dummy3", dummy1, STRING_LEN, dummy1);
+IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Dummy4", "dummy4", dummy1, STRING_LEN, dummy1);
 IotWebConfTextParameter inveterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
 
 IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("Values for handling the BMS");
@@ -93,9 +93,11 @@ IotWebConfNumberParameter bmsUdpateInterval = IotWebConfNumberParameter("BMS upd
 
 void wifiConnected()
 {
+/*  
   if(strlen(gNtpServerValue)) {
     configTime(atoi(gTimezoneValue)*3600, 0, gNtpServerValue);
   }
+*/
    ArduinoOTA.begin();
 }
 

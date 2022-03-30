@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "debugManagement.h"
 #include "common.h"
 
 extern char mqttServerValue[STRING_LEN];
