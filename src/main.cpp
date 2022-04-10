@@ -19,7 +19,8 @@ void setup() {
   Serial2.setRxBufferSize(512);
   inverterPreInit();
   wifiSetup();
-  mqttSetup();
+  //mqttSetup();
+  shellySetup();
   chargeControllerSetup();
   inverterSetup();  
   bmsSetup();
@@ -36,7 +37,6 @@ void loop() {
   blynkLoop(now);
   modbusLoop(now);
   debugLoop(now);
-  shellyLoop(now);
 }
 
 

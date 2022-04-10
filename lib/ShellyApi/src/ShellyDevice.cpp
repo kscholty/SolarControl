@@ -49,9 +49,9 @@ bool ShellyDevice::doLoop() {
 	bool result = false;
 	unsigned long now = millis();
 
-	if(now-mLastQuery>mDelay && !mBaseUrl.isEmpty()) {
+	if(now-mLastQuery>=mDelay && !mBaseUrl.isEmpty()) {
 		updateNow();
-		mLastQuery = now;
+		mLastQuery = now;    
     result = true;
 	}	
 
@@ -80,6 +80,13 @@ int ShellyDevice::getVoltage(unsigned int index) {
   return 0;
 }
 
+int ShellyDevice::getPowerFactor(unsigned int index) {
+  if (index < mNumEmeters) {
+    return mPowerFactorValues[index];
+  }
+  return 0;
+}
+
 bool ShellyDevice::queryStatus() {
   DynamicJsonDocument doc(2048);
 
@@ -94,6 +101,7 @@ bool ShellyDevice::queryStatus() {
       mPowerValues[i] = (float)meter["power"]*1000;
       mCurrentValues[i] = (float)meter["current"]*1000;
       mVoltageValues[i] = (float)meter["voltage"]*1000;
+      mPowerFactorValues[i] = (float)meter["pf"]*1000;
     }
 
     for (int i = 0; i < mNumRelays; ++i) {
@@ -152,7 +160,7 @@ bool ShellyDevice::sendGetRequest(JsonDocument& doc, String endpoint) {
     DeserializationError error = deserializeJson(doc, http.getString());
     mLastErrorCode = error.code();
     mLastErrorString = error.f_str();
-    result = error == 0;    
+    result = error == DeserializationError::Ok;    
   } else {
     mLastErrorCode = httpResponseCode;
     if(mLastErrorCode < 0) {

@@ -103,7 +103,7 @@ static void inverterSetupInverter()
     }
 
 
-    aPID.SetSampleTime(480);
+    aPID.SetSampleTime(500);
     aPID.SetOutputLimits(0,1000);
     gInverterTarget = inverterEmergencyTarget;
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];

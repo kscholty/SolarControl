@@ -6,6 +6,6 @@
 
 extern char ginverterShellyValue[STRING_LEN];
 extern ShellyDevice shelly3EM;
-extern void shellyLoop(unsigned long);
+extern void shellySetup();
 
 

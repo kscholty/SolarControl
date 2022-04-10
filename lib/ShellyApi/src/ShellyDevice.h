@@ -65,6 +65,14 @@ void setDelay(unsigned long aDelay) {mDelay=aDelay;}
  */
 void setIp(String anIp) {mBaseUrl = "http://" + anIp;}
 
+/**
+ * @brief Query the URL used to conbtact the client
+ * 
+ * 
+ * @returns The query URL
+ */
+const String& getQueryUrl() {return mBaseUrl;}
+
 
 /**
  * @brief Get the Last Error code
@@ -106,6 +114,16 @@ int getCurrent(unsigned int index);
 	 * @return the voltage of the resapective emeter or 0 if that does not exist
 	 */
 int getVoltage(unsigned int index);
+
+/**
+	 * Gets the status of the device.
+	 *
+	 * 
+	 * @param index the index of the emeter to query
+	 * @return the power factor of the resapective emeter or 0 if that does not exist
+	 */
+int getPowerFactor(unsigned int index);
+
 
 /**
 	 * Gets the "ison" state of the relay with the given index.
@@ -163,6 +181,7 @@ private:
 	int mPowerValues[numElements];
 	int mCurrentValues[numElements];
 	int mVoltageValues[numElements];
+	int mPowerFactorValues[numElements];
 	bool mRelayValues[numElements];
 	
 
