@@ -14,7 +14,6 @@
 
 #include "blynkmanagement.h"
 #include "inverterManagement.h"
-#include "mqttmanagement.h"
 #include "chargeControllerManagement.h"
 #include "bmsManagement.h"
 #include "excessControlManagement.h"
@@ -268,9 +267,6 @@ bool isValid() {
 
 BLYNK_CONNECTED()
 {
-DBG_SECT(
-    Blynk.virtualWrite(BLYNK_VPIN_MQTT_ENABLE, mqttEnabled() ? 1 : 0);
-)
     Blynk.virtualWrite(BLYNK_VPIN_BLE_CONNECTED, !gBmsDisconnect);
     if (!gBmsDisconnect)
     {
@@ -388,18 +384,6 @@ BLYNK_WRITE(BLYNK_VPIN_PID_OK) {
     }
 }
 
-BLYNK_WRITE(BLYNK_VPIN_MQTT_ENABLE)
-{
-    Serial.print("BLYNK_VPIN_MQTT_ENABLE changed: ");
-    Serial.println(param.asInt());
-    if (param.asInt() == 1) 
-    {
-        mqttEnable();
-    }
-    else {
-        mqttDisable();
-    }
-}
 
 BLYNK_WRITE(BLYNK_VPIN_ALL_LEGS)
 {
