@@ -1,11 +1,13 @@
 #include <WiFi.h>
 #include <netdb.h>
+#include "debugManagement.h"
 #include "ShellyManagement.h"
-#include "mqttmanagement.h"
 #include "inverterManagement.h"
 
 char ginverterShellyValue[STRING_LEN] = "";
-ShellyDevice shelly3EM;
+char shellyEM3Name[STRING_LEN] = "shellyem3-8CAAB561991E";
+
+static ShellyDevice shelly3EM;
 static bool isInit = false;
 static const int delayMs = 500;
 
@@ -32,7 +34,7 @@ bool resolveHostname(char hostname[STRING_LEN]) {
 void shellyInit() { 
 
     if(!isInit) {
-        isInit = resolveHostname(mqttEM3Name); 
+        isInit = resolveHostname(shellyEM3Name); 
         //shelly3EM.setDelay(500);
         shelly3EM.setDelay(0);
     }
@@ -59,7 +61,6 @@ void shellyLoop(void *) {
                 if (gGridLegValues[valueType][aLeg] != aValue) {
                   gGridLegValues[valueType][aLeg] = aValue;
                   powerUpdated = true;
-                  // DEBUG_I("Power (%d)= %.2f\n", aLeg, aValue);
                 }
               } break;
               case ValueCurrent:
@@ -96,7 +97,7 @@ void shellyLoop(void *) {
       if (++counter > RESOLVEDELAY) {
         // Repeat name resolution from time to time if
         // ip changes.
-        if (resolveHostname(mqttEM3Name)) {
+        if (resolveHostname(shellyEM3Name)) {
           counter = 0;
         }
       }

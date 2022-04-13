@@ -150,8 +150,6 @@ bool QUCCBms::parseCellInfo(const MessageHeader_t *data, size_t length, BmsCellI
 bool QUCCBms::parseBasicInfo(const MessageHeader_t *message, size_t dataSize,BmsBasicInfo_t *basicInfo) const {
     
     
-    size_t currentIndex = 0;
-    
     const QUCCBasicInfo_t *info = (const QUCCBasicInfo_t*)message->data;
     basicInfo->capacityRemain = info->getcapacityRemain();
     

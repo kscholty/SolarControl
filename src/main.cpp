@@ -2,7 +2,6 @@
 
 #include "wifimanagement.h"
 #include "blynkmanagement.h"
-#include "mqttmanagement.h"
 #include "invertermanagement.h"
 #include "chargeControllerManagement.h"
 #include "bmsManagement.h"
@@ -19,7 +18,6 @@ void setup() {
   Serial2.setRxBufferSize(512);
   inverterPreInit();
   wifiSetup();
-  //mqttSetup();
   shellySetup();
   chargeControllerSetup();
   inverterSetup();  

@@ -16,7 +16,6 @@
 
 #include "wifimanagement.h"
 #include "blynkmanagement.h"
-#include "mqttmanagement.h"
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
 #include "bmsManagement.h"
@@ -58,12 +57,12 @@ IotWebConfTextParameter blynkTokenParam = IotWebConfTextParameter("Blynk Token",
 IotWebConfTextParameter blynkServerParam = IotWebConfTextParameter("Blynk server", "blynkServer", blynkServerValue, STRING_LEN, blynkServerValue);
 IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, NUMBER_LEN, blynkPortValue);
 
-IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("MQTT configuration");
-IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server", "mqttServer", mqttServerValue, STRING_LEN, mqttServerValue);
-IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("MQTT port", "mqttPort", mqttPortValue, NUMBER_LEN, mqttPortValue);
-IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("MQTT user", "mqttUser", mqttUserNameValue, STRING_LEN);
-IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("MQTT password", "mqttPass", mqttUserPasswordValue, STRING_LEN);
-IotWebConfTextParameter mqttEm3NameParam = IotWebConfTextParameter("EM3 Name", "em3name", mqttEM3Name, STRING_LEN, mqttEM3Name);
+IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("Shelly 3EM configuration");
+IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("Unused", "mqttServer", dummy1, STRING_LEN, dummy1);
+IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("Unused", "mqttPort", dummy1, NUMBER_LEN, dummy1);
+IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("Unused", "mqttUser", dummy1, STRING_LEN);
+IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("Unused", "mqttPass", dummy1, STRING_LEN);
+IotWebConfTextParameter mqttEm3NameParam = IotWebConfTextParameter("EM3 Name", "em3name", shellyEM3Name, STRING_LEN, shellyEM3Name);
 
 
 IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
@@ -199,8 +198,8 @@ void handleRoot()
   s += "Current time: ";
   s += String(tod);
   s += "<br><br><b>Values</b> <ul>";
-  s += "<li>MQTT server: ";
-  s += mqttServerValue;
+  s += "<li>Shelly 3EM: ";
+  s += shellyEM3Name;
   s += "<li>Blynk server: ";
   s += blynkServerValue;
   s += "</ul>";
@@ -223,12 +222,14 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 
   int l = 0;
 
+/*
   l = server.arg(mqttServerParam.getId()).length();
   if (l> 0 && l < 3)
   {
     mqttServerParam.errorMessage = "MQTT server should have a minimum of 3 characters!";
     result = false;
   } 
+  */
 
   l = server.arg(blynkServerParam.getId()).length();
   if (l>0 && l < 3)
