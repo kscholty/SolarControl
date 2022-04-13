@@ -71,8 +71,11 @@ void shellyLoop(void *) {
                     shelly3EM.getVoltage(aLeg) / 1000.0f;
                 break;
               case ValuePowerFactor:
-                gGridLegValues[valueType][aLeg] =
-                    shelly3EM.getPowerFactor(aLeg) / 1000.0f;
+                {
+                  int value = shelly3EM.getPowerFactor(aLeg);
+                  if(value < 0 ) {value *= -1;}
+                  gGridLegValues[valueType][aLeg] = value / 1000.0f;
+                }     
                 break;
               default:
                 break;
@@ -80,12 +83,7 @@ void shellyLoop(void *) {
           }
           gGridSumValues[valueType] = gGridLegValues[valueType][0] +
                                       gGridLegValues[valueType][1] +
-                                      gGridLegValues[valueType][2];
-          /*
-          if (i == ValuePowerFactor && gGridLegValues[i][aLeg] < 0) {
-            gGridLegValues[i][aLeg] = fabs(gGridLegValues[i][aLeg]);
-          }
-          */
+                                      gGridLegValues[valueType][2];         
         }
         if (powerUpdated) {
           gInverterGridPowerUpdated();
