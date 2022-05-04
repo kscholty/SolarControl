@@ -4,7 +4,7 @@
 #include <driver/adc.h>
 #include <driver/i2s.h>
 #include <esp_adc_cal.h>
-#include <esp_event_loop.h>
+#include <esp_event.h>
 #include <freertos/ringbuf.h>
 #include <soc/sens_reg.h>
 #include <soc/sens_struct.h>
@@ -118,7 +118,7 @@ bool adcInit() {
       I2S_SAMPLE_RATE,
       I2S_SAMPLE_BITS,
       I2S_FORMAT,
-      I2S_COMM_FORMAT_I2S,
+      I2S_COMM_FORMAT_STAND_I2S,
       ESP_INTR_FLAG_LEVEL1,
       ADC_BUFFER_COUNT,
       READ_LEN / 2 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/,
