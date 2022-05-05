@@ -5,7 +5,9 @@
 
 extern char gBmsDummyValue[STRING_LEN];
 extern char gBmsUpdateIntervalValue[NUMBER_LEN];
-extern BMS_t *gBms;
+
+static const int bmsCount = 3;
+extern BMS::CBmsBase* gBms[bmsCount];
 
 #pragma pack(push,1)
 

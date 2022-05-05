@@ -14,8 +14,8 @@
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial2.begin(115200);
   Serial2.setRxBufferSize(512);
+  Serial2.begin(115200);
   inverterPreInit();
   wifiSetup();
   shellySetup();

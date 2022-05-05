@@ -31,6 +31,7 @@ public:
     bool setup();
     bool getHighFrequRequest( const uint8_t **request,size_t *length) const;
     bool getLowFrequRequest(const uint8_t **request,size_t *length) const ;
+    bool getSetupRequest(uint16_t id, const uint8_t **request,size_t *length) const;
     size_t messageHeaderSize() const;
 
     size_t getBodySize(const uint8_t *messagebuffer,size_t length) const;

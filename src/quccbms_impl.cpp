@@ -1,8 +1,6 @@
 
 #include "common.h"
 
-#if QUCCBMS
-
 #include "debugManagement.h"
 #include "quccbms_impl.h"
 
@@ -94,6 +92,12 @@ bool QUCCBms::setup() {
     return true;
  }
 
+ bool QUCCBms::getSetupRequest(uint16_t id, const uint8_t **request,size_t *length) const {
+    *request = 0;
+    *length = 0;
+    return false;
+ }
+
  size_t QUCCBms::messageHeaderSize() const {
      return sizeof(MessageHeader_t);
  }
@@ -177,5 +181,3 @@ bool QUCCBms::parseBasicInfo(const MessageHeader_t *message, size_t dataSize,Bms
 }
     
 }
-
-#endif

@@ -36,13 +36,13 @@ uint16_t getter(TRegister *reg, uint16_t val)
   switch (regNum)
   {
   case REG_BATTERY_VOLTAGE:
-    if(gBms)  return gBms->basicInfo().getTotalVoltage();
+    if(gBms)  return gBms[0]->basicInfo().getTotalVoltage();
     break;
   case REG_BATTERY_CURRENT:
-    if(gBms)  return gBms->basicInfo().getcurrent();
+    if(gBms)  return gBms[0]->basicInfo().getcurrent();
     break;
   case REG_BATTERY_SOC:
-    if(gBms)  return gBms->basicInfo().getstateOfCharge();
+    if(gBms)  return gBms[0]->basicInfo().getstateOfCharge();
     break;
   case REG_CHARGER_POWER:
     return gCurrentPowerCreated * 10;
