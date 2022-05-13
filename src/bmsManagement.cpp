@@ -2,17 +2,22 @@
 #include <Arduino.h>
 
 #include "common.h"
+
 #include "debugManagement.h"
 #include "bmsManagement.h"
 #include "modbusManagement.h"
 #include "Battery.h"
 
+
+// Make sure the order of thise strings eqauls the enum BMS_TYPE
+const char gBmsNames[NUM_BMS_TYPES][STRING_LEN] = { "None", "JBD/QUCC", "JK BMS", "Seplos" };
+
 BMS::CBmsBase* gBms[bmsCount] = {0,0,0};
 
 char gBmsUpdateIntervalValue[NUMBER_LEN] = "3000";
-char gBmsDummyValue[STRING_LEN];
+char gBmsType[bmsCount][STRING_LEN] = {"None", "None", "None"};
 
-
+static BMS_TYPE bmsTypes[bmsCount] = {NONE,NONE,NONE};
 bool gBmsDisconnect = true;
 bool gBmsUpdated = false;
 
@@ -21,14 +26,38 @@ static TaskHandle_t taskId;
 static unsigned long bmsUpdateShortIntervalMilis = 3000;
 static unsigned long bmsUpdateLongIntervalMilis = 6000;
 
+
+void parseBmsTypes() {
+  for(int bms = 0;bms<bmsCount;++bms) {
+    bmsTypes[bms] = NONE;
+    for(int name = 0; name<NUM_BMS_TYPES;++name) {
+      if(strcmp(gBmsNames[name],gBmsType[bms])== 0) {
+        bmsTypes[bms] = (BMS_TYPE)name;        
+        Serial.printf("BMS %d is of type %d (%s)\n",bms,name,gBmsType[bms]);
+        break;
+      }
+    }
+  }
+}
+
 static bool bmsSetupBms() {
   bmsUpdateShortIntervalMilis = atoi(gBmsUpdateIntervalValue);
   if (bmsUpdateShortIntervalMilis < 500) {
     bmsUpdateShortIntervalMilis = 3000;
   }
   bmsUpdateLongIntervalMilis = 3 * bmsUpdateShortIntervalMilis;
-  gBms[0] = new JKBMS_t(Serial2, gSerial2Mutex);
-  gBms[1] = new QUCCBMS_t(Serial2, gSerial2Mutex);
+  parseBmsTypes();
+  for(int i = 0;i<bmsCount;++i) {
+    switch(bmsTypes[i]) {
+      case NONE: gBms[i] = new BMS::CDummyBms;  break;
+      case JBD:  gBms[i] = new QUCCBMS_t(Serial2, gSerial2Mutex);; break;
+      case JK:  gBms[i] = new JKBMS_t(Serial2, gSerial2Mutex);; break;
+      case SEPLOS: gBms[i] = new BMS::CDummyBms; break;
+      default: gBms[i] = 0; break;
+
+    }
+  }
+ 
   gBmsUpdated = false;
   for (int i = 0; i < bmsCount; ++i) {
     if (gBms[i]) {

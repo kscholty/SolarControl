@@ -14,7 +14,7 @@ namespace BMS {
 
 class CBmsBase {
  public:
-  CBmsBase() : mLowDelayMs(300000), mHighDelayMs(1000) {}
+  CBmsBase() : mLowDelayMs(300000), mHighDelayMs(1000) { }
   virtual ~CBmsBase() {}
   virtual bool setup() = 0;
   virtual bool doLoop() = 0;
@@ -29,6 +29,12 @@ class CBmsBase {
 
   BmsBasicInfo_t mBasicInfo;
   BmsCellInfo_t mCellInfo;
+};
+
+class CDummyBms: public CBmsBase {
+public:
+  virtual bool setup() { return true;}
+  virtual bool doLoop() { return false;}
 };
 
 template <class BMS_IMPL>

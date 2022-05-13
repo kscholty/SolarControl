@@ -96,6 +96,7 @@ DBG_SECT(
 #define BLYNK_CHARGER_PIN(charger_id, VPIN) (((charger_id)*NUM_CHARGER_VALUES) + (VPIN) + FIRST_CHARGER_VPIN)
 #define BLYNK_CHARGER_1_ERROR V38
 #define BLYNK_CHARGER_2_ERROR V39
+#define BLYNK_SEL_BMS V93
 
 extern char blynkTokenValue[BLYNK_STRLEN];
 extern char blynkServerValue[BLYNK_STRLEN];

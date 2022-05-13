@@ -3,11 +3,22 @@
 #include "common.h"
 #include "Battery.h"
 
-extern char gBmsDummyValue[STRING_LEN];
-extern char gBmsUpdateIntervalValue[NUMBER_LEN];
 
+enum BMS_TYPE {
+  NONE = 0,
+  JBD,
+  JK,
+  SEPLOS,
+  NUM_BMS_TYPES
+};
+
+extern const char gBmsNames[NUM_BMS_TYPES][STRING_LEN];
+extern char gBmsUpdateIntervalValue[NUMBER_LEN];
 static const int bmsCount = 3;
+
+
 extern BMS::CBmsBase* gBms[bmsCount];
+extern char gBmsType[bmsCount][STRING_LEN];
 
 #pragma pack(push,1)
 

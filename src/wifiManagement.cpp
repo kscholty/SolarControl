@@ -79,14 +79,15 @@ IotWebConfNumberParameter charger2Id = IotWebConfNumberParameter("Charger 2 Modb
 IotWebConfNumberParameter chargerUdpateInterval = IotWebConfNumberParameter("Charger upd. interval [s]", "chupd", gChargerUpdateIntervalValue, sizeof(gChargerUpdateIntervalValue), gChargerUpdateIntervalValue);
 
 IotWebConfParameterGroup dayNightGroup = IotWebConfParameterGroup("Values for handling activation of components");
-IotWebConfTextParameter ntpServerNameParam = IotWebConfTextParameter("Dummy1", "dummy1", dummy1, STRING_LEN,dummy1);
-IotWebConfTextParameter timezoneParam = IotWebConfTextParameter("Dummy2", "dummy2", dummy1, NUMBER_LEN, dummy1);
-IotWebConfTextParameter latitudeParam = IotWebConfTextParameter("Dummy3", "dummy3", dummy1, STRING_LEN, dummy1);
-IotWebConfTextParameter longitudeParam = IotWebConfTextParameter("Dummy4", "dummy4", dummy1, STRING_LEN, dummy1);
-IotWebConfTextParameter inveterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
+IotWebConfTextParameter lowVoltageDisconnect = IotWebConfTextParameter("Low voltage disconnect (not functional)", "LVD", dummy1, STRING_LEN,dummy1);
+IotWebConfTextParameter lowVoltageReconnect = IotWebConfTextParameter("Low voltage reconnect (not functional)", "LVR", dummy1, NUMBER_LEN, dummy1);
+IotWebConfTextParameter inverterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
+
 
 IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("Values for handling the BMS");
-IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Unused", "bmsad", gBmsDummyValue, STRING_LEN,gBmsDummyValue);
+IotWebConfSelectParameter bmsTypeChooserParam1 = IotWebConfSelectParameter("BMS1 type", "bms1", gBmsType[0], STRING_LEN, (char*)gBmsNames, (char*)gBmsNames, sizeof(gBmsNames) / STRING_LEN, STRING_LEN,gBmsNames[0]);
+IotWebConfSelectParameter bmsTypeChooserParam2 = IotWebConfSelectParameter("BMS2 type", "bms2", gBmsType[1], STRING_LEN, (char*)gBmsNames, (char*)gBmsNames, sizeof(gBmsNames) / STRING_LEN, STRING_LEN,gBmsNames[0]);
+IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Unused", "bmsad", dummy1, STRING_LEN,dummy1);
 IotWebConfNumberParameter bmsUdpateInterval = IotWebConfNumberParameter("BMS upd. interval [ms]", "bmsupd", gBmsUpdateIntervalValue, sizeof(gBmsUpdateIntervalValue), gBmsUpdateIntervalValue);
 
 
@@ -125,12 +126,13 @@ void wifiSetup()
   chargerGroup.addItem(&chargerUdpateInterval);
 
 
-  dayNightGroup.addItem(&ntpServerNameParam);
-  dayNightGroup.addItem(&timezoneParam);
-  dayNightGroup.addItem(&latitudeParam);
-  dayNightGroup.addItem(&longitudeParam);
+  dayNightGroup.addItem(&inverterShellyNameParam);
+  dayNightGroup.addItem(&lowVoltageDisconnect);
+  dayNightGroup.addItem(&lowVoltageReconnect);
   
-  bmsGroup.addItem(&bmsBLEAddressParam);
+
+  bmsGroup.addItem(&bmsTypeChooserParam1);
+  bmsGroup.addItem(&bmsTypeChooserParam2);
   bmsGroup.addItem(&bmsUdpateInterval);
 
   iotWebConf.setStatusPin(STATUS_PIN);
@@ -221,15 +223,7 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
   bool result = true;
 
   int l = 0;
-
-/*
-  l = server.arg(mqttServerParam.getId()).length();
-  if (l> 0 && l < 3)
-  {
-    mqttServerParam.errorMessage = "MQTT server should have a minimum of 3 characters!";
-    result = false;
-  } 
-  */
+  int l2 = 0;
 
   l = server.arg(blynkServerParam.getId()).length();
   if (l>0 && l < 3)
@@ -301,9 +295,20 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
     }
   }
 
-  l = server.arg(timezoneParam.getId()).toInt();
-  if(l<-12 || l>12 ) {
-      timezoneParam.errorMessage = "Timezone offset must be between -12h and 12h";
+  l = server.arg(lowVoltageDisconnect.getId()).toInt();
+  l2 = server.arg(lowVoltageReconnect.getId()).toInt();
+  if(l<0) {
+        lowVoltageDisconnect.errorMessage = "Value has to be > 0";
+      result = false;
+  }
+  if(l<2) {
+        lowVoltageReconnect.errorMessage = "Value has to be > 0";
+      result = false;
+  }
+
+  if(l>=l2 || l<0 || l2 <0 ) {
+      lowVoltageDisconnect.errorMessage = "Reconnect has to be bigger than disconnect";
+      lowVoltageReconnect.errorMessage = "Reconnect has to be bigger than disconnect";
       result = false;
   }
 

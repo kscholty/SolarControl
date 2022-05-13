@@ -4,7 +4,6 @@
 #include "common.h"
 #include "bmstypes.h"
 
-#if JKBMS
 
 namespace BMS {
 
@@ -66,5 +65,3 @@ protected:
 };
 
 }
-
-#endif
