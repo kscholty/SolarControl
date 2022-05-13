@@ -124,7 +124,10 @@ bool adcInit() {
       READ_LEN / 2 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/,
       true,
       true,
-      0};
+      0/*,
+      I2S_MCLK_MULTIPLE_DEFAULT,
+      I2S_BITS_PER_CHAN_DEFAULT
+      */};
 
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(I2S_ADC_CURRENT_CHANNEL, ADC_ATTEN_DB_11);

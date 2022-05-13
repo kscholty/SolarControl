@@ -4,7 +4,6 @@
 #include "common.h"
 #include "bmstypes.h"
 
-#if JKBMS
 
 namespace BMS {
 
@@ -51,6 +50,7 @@ public:
     bool setup();
     bool getHighFrequRequest( const uint8_t **request,size_t *length) const;
     bool getLowFrequRequest(const uint8_t **request,size_t *length) const ;
+    bool getSetupRequest(uint16_t id, const uint8_t **request,size_t *length) const;
     size_t messageHeaderSize() const;
 
     size_t getBodySize(const uint8_t *messagebuffer,size_t length) const;
@@ -60,11 +60,8 @@ protected:
     uint16_t parseCellInfo(const uint8_t *data, BmsCellInfo_t *cellInfo) const ;
     bool parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasicInfo_t *basicInfo, BmsCellInfo_t *cellInfo) ;
 
-
     unsigned int mProtocolVersion;
 
 };
 
 }
-
-#endif

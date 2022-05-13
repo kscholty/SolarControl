@@ -133,7 +133,7 @@ static void inverterSetupInverter()
 
 void inverterSetRealTarget()
 {
-    if( (gBms->basicInfo().getTotalVoltage() < 5000) && (gCurrentPowerCreated > 80)) {
+    if( (gBms[0]->basicInfo().getTotalVoltage() < 5000) && (gCurrentPowerCreated > 80)) {
         // If we are below 49V, dont use more than the PV produces
         // If this is more than required, put the rest into the battery.
         realTarget = min((double)gCurrentPowerCreated,gInverterTarget);

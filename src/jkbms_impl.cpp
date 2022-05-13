@@ -1,8 +1,6 @@
 
 #include "common.h"
 
-#if JKBMS
-
 #include "debugManagement.h"
 #include "JKBms_impl.h"
 
@@ -59,6 +57,16 @@ bool JKBms::setup() {
     return true;
  }
 
+ bool JKBms::getSetupRequest(uint16_t id, const uint8_t **request,size_t *length) const {
+     // Ask for nominal capacity to be able to calculate remaining capacity
+    static const uint8_t message[] = {0x4E, 0x57, 0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03, 0x00, 0xaa, 0x00, 0x00, 0x00, 0x00, 0x68, 0x00, 0x00, 0x01, 0xD0}; 
+
+    *request = message;
+    *length = sizeof(message);        
+
+    return id == 0;
+ }
+
  size_t JKBms::messageHeaderSize() const {
      return sizeof(MessageHeader_t);
  }
@@ -94,18 +102,21 @@ uint16_t JKBms::parseCellInfo(const uint8_t *data,BmsCellInfo_t *cellInfo) const
     const Cell_t *cell = (const Cell_t*)&data[1];
 
     cellInfo->setNumCells(numCells);    
+    DEBUG_I("Num Cells: %d\n",numCells);
 
-    for(size_t i = 0; i<numCells;++i) {
-        cellInfo->setVoltage(cell->index,__builtin_bswap16(cell->voltage));    
+    for(size_t i = 0; i<numCells;++i,++cell) {        
+        cellInfo->setVoltage(cell->index-1,__builtin_bswap16(cell->voltage));          
     }
     
     return data[0]+1;
 }
 
 
-#define MKTEMP(TMP) (TMP)<=100 ?  (int16_t)(TMP):100-((int16_t)(TMP))
+#define MKTEMP(TMP) ((TMP)<=100 ?  (int16_t)(TMP):100-((int16_t)(TMP)))
 #define MK16(HIGH,LOW) (((uint16_t)(HIGH))<<8 | (LOW))
+#define MK32(BH,B2,B3,BL) ((((uint32_t)BH)<<24)|(((uint32_t)B2)<<16) | (((uint32_t)B3)<<8) | BL)
 #define NEXT16Bit(RESULT) { RESULT = MK16(buffer[currentIndex],buffer[currentIndex+1]); currentIndex+=2; }
+#define NEXT32Bit(RESULT) { RESULT = MK32(buffer[currentIndex],buffer[currentIndex+1], buffer[currentIndex+2],buffer[currentIndex+3]); currentIndex+=4; }
 
 bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasicInfo_t *basicInfo, BmsCellInfo_t *cellInfo) {
     if(dataSize != message->length() ) {
@@ -133,23 +144,24 @@ bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasi
             case 0x82:
                 // Values above 100 indicate a negative value
                 NEXT16Bit(val16)
-                basicInfo->temps[currentRegister - 0x80] = MKTEMP(val16);                
+                basicInfo->temps[currentRegister - 0x80] = MKTEMP(val16) * 10;                
                 break;
             case 0x83:
                 NEXT16Bit(basicInfo->totalVoltage)                
                 break;
             case 0x84:
-                // Set sign bit indicates a negative value
+                // Set sign bit indicates a positive value
                 // Why they don't encode it in 2-complement do only the chinese gods know.
                 NEXT16Bit(val16)
                 if(mProtocolVersion == 1) {
-                    basicInfo->current = (val16 & 0x8000) ? -1*((val16 & 0x7FFF) ):(val16 & 0x7FFF) ;
+                    basicInfo->current = (val16 & 0x8000) ? ((val16 & 0x7FFF) ):-1*(val16 & 0x7FFF) ;
                 } else {
                     basicInfo->current = 10000-(int)val16;
                 }
                 break;
             case 0x85:
                 basicInfo->stateOfCharge = buffer[currentIndex++];
+                basicInfo->capacityRemain = basicInfo->stateOfCharge * basicInfo->nominalCapacity;
                 break;
             case 0x86:
                 basicInfo->numTempSensors = buffer[currentIndex++];
@@ -170,6 +182,9 @@ bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasi
             case 0x8c:
                 NEXT16Bit(basicInfo->batteryStatus.rawValue);
                 break;
+            case 0xaa: 
+                NEXT32Bit(basicInfo->nominalCapacity);   
+                break;             
             case 0xc0:
                 mProtocolVersion = buffer[currentIndex++];
                 break;
@@ -221,8 +236,7 @@ bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasi
              case 0xbf:
                 // 16-Bit registers
                 currentIndex+=2;
-                break;
-            case 0xaa:
+                break;            
             case 0xb5:
             case 0xb6:
             case 0xb9:
@@ -254,4 +268,3 @@ bool JKBms::parseMessage(const MessageHeader_t *message, size_t dataSize,BmsBasi
     
 }
 
-#endif

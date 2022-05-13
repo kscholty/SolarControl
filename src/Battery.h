@@ -5,33 +5,52 @@
 #include "common.h"
 #include "bmstypes.h"
 
-#if JKBMS
+
 #include "jkbms_impl.h"
-#elif QUCCBMS
 #include "quccbms_impl.h"
-#endif
+
 
 namespace BMS {
 
-template <class BMS_IMPL>
-class CBms {
+class CBmsBase {
  public:
-  CBms(HardwareSerial &aStream, SemaphoreHandle_t aMutex)
-      : mCommStream(aStream),
-        mStreamMutex(aMutex),
-        mLowDelayMs(300000),
-        mHighDelayMs(1000),
-        mLastLowTrigger(1),
-        mLastHighTrigger(1)
-       {}
-  ~CBms(){};
-
-  bool setup(){return mBmsImpl.setup();}
-  bool doLoop();
+  CBmsBase() : mLowDelayMs(300000), mHighDelayMs(1000) { }
+  virtual ~CBmsBase() {}
+  virtual bool setup() = 0;
+  virtual bool doLoop() = 0;
   void setLowFrequencyDelay(unsigned int aDelay) { mLowDelayMs = aDelay; }
   void setHighFrequencyDelay(unsigned int aDelay) { mHighDelayMs = aDelay; }
   const BMS::BmsBasicInfo_t &basicInfo() const { return mBasicInfo; }
   const BMS::BmsCellInfo_t &cellInfo() const { return mCellInfo; }
+
+ protected:
+  unsigned long mLowDelayMs;
+  unsigned long mHighDelayMs;
+
+  BmsBasicInfo_t mBasicInfo;
+  BmsCellInfo_t mCellInfo;
+};
+
+class CDummyBms: public CBmsBase {
+public:
+  virtual bool setup() { return true;}
+  virtual bool doLoop() { return false;}
+};
+
+template <class BMS_IMPL>
+class CBms: public CBmsBase {
+ public:
+  CBms(HardwareSerial &aStream, SemaphoreHandle_t aMutex)
+      : mCommStream(aStream),
+        mStreamMutex(aMutex),        
+        mLastLowTrigger(1),
+        mLastHighTrigger(1)
+       {}
+  virtual ~CBms(){};
+
+  virtual bool setup();
+  virtual bool doLoop();
+  
 
  protected:
   bool readHighFrequentData();
@@ -44,15 +63,34 @@ class CBms {
  protected:
   HardwareSerial &mCommStream;
   SemaphoreHandle_t mStreamMutex;
-  unsigned long mLowDelayMs;
-  unsigned long mHighDelayMs;
   unsigned long mLastLowTrigger;
   unsigned long mLastHighTrigger;
-  BmsBasicInfo_t mBasicInfo;
-  BmsCellInfo_t mCellInfo;
   BMS_IMPL mBmsImpl;
   
 };
+
+template <class BMS_IMPL>
+bool CBms<BMS_IMPL>::setup(){
+  bool result;
+  result = mBmsImpl.setup();
+  if(result) {    
+    const uint8_t *request = 0;
+    size_t length = 0;
+    bool res = true;
+    uint16_t requestId = 0;
+    while(res) {
+      res = mBmsImpl.getSetupRequest(requestId,&request, &length);
+      if (res && length && request) {
+        res = handleRequest(request, length);        
+        ++requestId;
+      } else {
+        res = false;
+      }      
+    }
+  }
+  return result;
+  
+}
 
 template <class BMS_IMPL>
 bool CBms<BMS_IMPL>::readHighFrequentData() {
@@ -165,11 +203,11 @@ template <class BMS_IMPL>
 bool CBms<BMS_IMPL>::doLoop() {
   size_t now = millis();
   bool res = false;
-  if (now - mLastLowTrigger > mLowDelayMs) {
+  if (now - mLastLowTrigger >= mLowDelayMs) {
     res = readLowFrequentData();
     mLastLowTrigger = now;
   }
-  if (now - mLastHighTrigger > mHighDelayMs) {
+  if (now - mLastHighTrigger >= mHighDelayMs) {
     res |= readHighFrequentData();
     mLastHighTrigger = now;
   }
@@ -179,8 +217,6 @@ bool CBms<BMS_IMPL>::doLoop() {
 
 }  // namespace BMS
 
-#if JKBMS
-typedef BMS::CBms<BMS::JKBms> BMS_t;
-#elif QUCCBMS
-typedef BMS::CBms<BMS::QUCCBms> BMS_t;
-#endif
+
+typedef BMS::CBms<BMS::JKBms> JKBMS_t;
+typedef BMS::CBms<BMS::QUCCBms> QUCCBMS_t;
