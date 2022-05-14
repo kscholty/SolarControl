@@ -50,9 +50,9 @@ static bool bmsSetupBms() {
   for(int i = 0;i<bmsCount;++i) {
     switch(bmsTypes[i]) {
       case NONE: gBms[i] = new BMS::CDummyBms;  break;
-      case JBD:  gBms[i] = new QUCCBMS_t(Serial2, gSerial2Mutex);; break;
-      case JK:  gBms[i] = new JKBMS_t(Serial2, gSerial2Mutex);; break;
-      case SEPLOS: gBms[i] = new BMS::CDummyBms; break;
+      case JBD:  gBms[i] = new QUCCBMS_t(Serial2, gSerial2Mutex); break;
+      case JK:  gBms[i] = new JKBMS_t(Serial2, gSerial2Mutex); break;
+      case SEPLOS: gBms[i] = new SeplosBMS_t(Serial2, gSerial2Mutex); break;
       default: gBms[i] = 0; break;
 
     }

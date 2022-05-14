@@ -8,6 +8,7 @@
 
 #include "jkbms_impl.h"
 #include "quccbms_impl.h"
+#include "seplosbms_impl.h"
 
 
 namespace BMS {
@@ -220,3 +221,4 @@ bool CBms<BMS_IMPL>::doLoop() {
 
 typedef BMS::CBms<BMS::JKBms> JKBMS_t;
 typedef BMS::CBms<BMS::QUCCBms> QUCCBMS_t;
+typedef BMS::CBms<BMS::SeplosBms> SeplosBMS_t;
