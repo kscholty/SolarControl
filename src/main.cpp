@@ -8,7 +8,7 @@
 #include "excessControlManagement.h"
 #include "debugManagement.h"
 #include "modbusManagement.h"
-#include "ShellyManagement.h"
+#include "modbusClientManagement.h"
 
 
 void setup() {
@@ -18,7 +18,7 @@ void setup() {
   Serial2.begin(115200);
   inverterPreInit();
   wifiSetup();
-  shellySetup();
+  modbusClientSetup();
   chargeControllerSetup();
   inverterSetup();  
   bmsSetup();

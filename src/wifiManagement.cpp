@@ -19,7 +19,7 @@
 #include "inverterManagement.h"
 #include "chargeControllerManagement.h"
 #include "bmsManagement.h"
-#include "ShellyManagement.h"
+#include "modbusClientManagement.h"
 
 static char dummy1[STRING_LEN];
 // -- Initial password to connect to the Thing, when it creates an own Access Point.
@@ -52,20 +52,20 @@ bool gNeedReset = false;
 
 IotWebConf iotWebConf(thingName, &dnsServer, &server, wifiInitialApPassword, CONFIG_VERSION);
 
-IotWebConfParameterGroup blynkGroup = IotWebConfParameterGroup("Blynk configuration");
+IotWebConfParameterGroup blynkGroup = IotWebConfParameterGroup("Blynk","Blynk configuration");
 IotWebConfTextParameter blynkTokenParam = IotWebConfTextParameter("Blynk Token", "blynkToken", blynkTokenValue, BLYNK_STRLEN);
 IotWebConfTextParameter blynkServerParam = IotWebConfTextParameter("Blynk server", "blynkServer", blynkServerValue, STRING_LEN, blynkServerValue);
 IotWebConfNumberParameter blynkPortParam = IotWebConfNumberParameter("Blynk port", "blynkPort", blynkPortValue, NUMBER_LEN, blynkPortValue);
 
-IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("Shelly 3EM configuration");
+IotWebConfParameterGroup mqttGroup = IotWebConfParameterGroup("E3DC", "E3DC S10 configuration");
 IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("Unused", "mqttServer", dummy1, STRING_LEN, dummy1);
 IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("Unused", "mqttPort", dummy1, NUMBER_LEN, dummy1);
 IotWebConfTextParameter mqttUserNameParam = IotWebConfTextParameter("Unused", "mqttUser", dummy1, STRING_LEN);
 IotWebConfPasswordParameter mqttUserPasswordParam = IotWebConfPasswordParameter("Unused", "mqttPass", dummy1, STRING_LEN);
-IotWebConfTextParameter mqttEm3NameParam = IotWebConfTextParameter("EM3 Name", "em3name", shellyEM3Name, STRING_LEN, shellyEM3Name);
+IotWebConfTextParameter mqttEm3NameParam = IotWebConfTextParameter("EM3 Name", "em3name", S10Name, STRING_LEN, S10Name);
 
 
-IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inverter configuration");
+IotWebConfParameterGroup inverterGroup = IotWebConfParameterGroup("Inv","Inverter configuration");
 IotWebConfNumberParameter inverterLegParam = IotWebConfNumberParameter("Inverter leg", "invLeg", gInverterLegValue, STRING_LEN, gInverterLegValue);
 IotWebConfNumberParameter inverterUpdateIntervalParam = IotWebConfNumberParameter("Inverter update interval [ms]", "invUp", gInverterUpdateIntervalValue, NUMBER_LEN, gInverterUpdateIntervalValue);
 IotWebConfNumberParameter inverterTargetValueParam = IotWebConfNumberParameter("Inverter Offset [W]", "invOff", gInverterOffsetValue, NUMBER_LEN, gInverterOffsetValue);
@@ -73,18 +73,18 @@ IotWebConfNumberParameter inverterTimeoutParam = IotWebConfNumberParameter("Inve
 IotWebConfNumberParameter inverterEmergencyTargetValueParam = IotWebConfNumberParameter("Default output [W]", "EmOut", gInverterEmergencyTargetValue, NUMBER_LEN, gInverterEmergencyTargetValue);
 IotWebConfCheckboxParameter inverterEcessValueParam = IotWebConfCheckboxParameter("Send excess power to grid","excess",gSendExcessToGrid,NUMBER_LEN,true);
 
-IotWebConfParameterGroup chargerGroup = IotWebConfParameterGroup("Charge controller configuration");
+IotWebConfParameterGroup chargerGroup = IotWebConfParameterGroup("Charge","Charge controller configuration");
 IotWebConfNumberParameter charger1Id = IotWebConfNumberParameter("Charger 1 ModbusId","ch1modbus", gChargerModbusAdressesValue[0],4);
 IotWebConfNumberParameter charger2Id = IotWebConfNumberParameter("Charger 2 ModbusId", "ch2modbus", gChargerModbusAdressesValue[1], 4);
 IotWebConfNumberParameter chargerUdpateInterval = IotWebConfNumberParameter("Charger upd. interval [s]", "chupd", gChargerUpdateIntervalValue, sizeof(gChargerUpdateIntervalValue), gChargerUpdateIntervalValue);
 
-IotWebConfParameterGroup dayNightGroup = IotWebConfParameterGroup("Values for handling activation of components");
+IotWebConfParameterGroup dayNightGroup = IotWebConfParameterGroup("Disconnect","Values for handling activation of components");
 IotWebConfTextParameter lowVoltageDisconnect = IotWebConfTextParameter("Low voltage disconnect (not functional)", "LVD", dummy1, STRING_LEN,dummy1);
 IotWebConfTextParameter lowVoltageReconnect = IotWebConfTextParameter("Low voltage reconnect (not functional)", "LVR", dummy1, NUMBER_LEN, dummy1);
 IotWebConfTextParameter inverterShellyNameParam = IotWebConfTextParameter("inverterShelly", "invShell", ginverterShellyValue, STRING_LEN, ginverterShellyValue);
 
 
-IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("Values for handling the BMS");
+IotWebConfParameterGroup bmsGroup = IotWebConfParameterGroup("BMS","Values for handling the BMS");
 IotWebConfSelectParameter bmsTypeChooserParam1 = IotWebConfSelectParameter("BMS1 type", "bms1", gBmsType[0], STRING_LEN, (char*)gBmsNames, (char*)gBmsNames, sizeof(gBmsNames) / STRING_LEN, STRING_LEN,gBmsNames[0]);
 IotWebConfSelectParameter bmsTypeChooserParam2 = IotWebConfSelectParameter("BMS2 type", "bms2", gBmsType[1], STRING_LEN, (char*)gBmsNames, (char*)gBmsNames, sizeof(gBmsNames) / STRING_LEN, STRING_LEN,gBmsNames[0]);
 IotWebConfTextParameter bmsBLEAddressParam = IotWebConfTextParameter("Unused", "bmsad", dummy1, STRING_LEN,dummy1);
@@ -201,7 +201,7 @@ void handleRoot()
   s += String(tod);
   s += "<br><br><b>Values</b> <ul>";
   s += "<li>Shelly 3EM: ";
-  s += shellyEM3Name;
+  s += S10Name;
   s += "<li>Blynk server: ";
   s += blynkServerValue;
   s += "</ul>";

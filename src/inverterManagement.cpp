@@ -207,7 +207,7 @@ static void inverterLoop()
                     //DEBUG_W("Inverter detected timeout. MQTT not running");
                 } 
 
-                if (gInverterPower < realTarget)
+                if ((gInverterPower < realTarget) && (realTarget > 0))  
                 {
                     pinValue = HIGH;
                 }
