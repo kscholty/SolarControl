@@ -119,9 +119,13 @@ bool CBms<BMS_IMPL>::readLowFrequentData() {
 
 template <class BMS_IMPL>
 bool CBms<BMS_IMPL>::handleRequest(const uint8_t *request, size_t length) {
+
+  
   bool result = false;
   size_t messageSize = 0;
   uint8_t *answer = 0;
+
+
   if (!mStreamMutex ||
       xSemaphoreTake(mStreamMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     while (mCommStream.read() != -1)
@@ -135,6 +139,7 @@ bool CBms<BMS_IMPL>::handleRequest(const uint8_t *request, size_t length) {
     vTaskDelay(300);
     messageSize = readAnswerMessage(&answer);
     if (mStreamMutex) xSemaphoreGive(mStreamMutex);
+
     if (messageSize) {
       // We got an answer
       result =

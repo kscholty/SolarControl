@@ -118,12 +118,18 @@ void modbusClientLoop(void *) {
 void modbusClientSetup()
 {
     TaskHandle_t handle;
+    String name(S10Name);
+    name.trim();
+    if(!name.length()) {
+      Debug.print(" modbusClient no name given.  ");
+      return;
+    }
     BaseType_t result = xTaskCreate(modbusClientLoop, "shelly", 4096, 0, 2, &handle);
     if (result != pdPASS)
     {
         if (Debug.isActive(Debug.ERROR))
         {
-            Debug.print(" Shelly taskCreation failed with error ");
+            Debug.print(" modbusClient taskCreation failed with error ");
             Debug.println(result);
         }
         gInverterTaskHandle = 0;
