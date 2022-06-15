@@ -10,6 +10,7 @@
 #include "bmsManagement.h"
 #include "chargeControllerManagement.h"
 
+
 #if DBUG_ON
 #include "mqttmanagement.h"
 
@@ -29,8 +30,10 @@ char gInverterEmergencyTargetValue[NUMBER_LEN] = "100";
 char gSendExcessToGrid[NUMBER_LEN] = "selected";
 char gInverterUpdateIntervalValue[NUMBER_LEN] = "2000";
 char gInverterLegValue[NUMBER_LEN] = "2";
+char gInverterOutputMax[NUMBER_LEN] = "2200";
+char gInverterOutputMin[NUMBER_LEN] = "-800";
 
-bool gInverterShutdown = true;
+bool gInverterShutdown = false;
 
 
 TaskHandle_t gInverterTaskHandle = 0;
@@ -60,7 +63,8 @@ static long lastGridUpdateReceived = 0;
 static long inverterTimeout = 60000;
 static float inverterEmergencyTarget=100;
 static unsigned int inverterUpdateInterval = 200;
-
+static  int inverterOutputMax = 2000;
+static  int inverterOutputMin = 0;
 static uint8_t pinValue;
 
 static bool useInverterOutput = true;
@@ -94,7 +98,8 @@ static void inverterSetupInverter()
     inverterEmergencyTarget = atoi(gInverterEmergencyTargetValue);    
     inverterUpdateInterval = atoi(gInverterUpdateIntervalValue);
     inverterLeg = atoi(gInverterLegValue)-1;
-
+    inverterOutputMax = atoi(gInverterOutputMax);
+    inverterOutputMin = atoi(gInverterOutputMin);
     useInverterOutput = true;
 
     if (inverterUpdateInterval < 1)
@@ -103,8 +108,8 @@ static void inverterSetupInverter()
     }
 
 
-    aPID.SetSampleTime(500);
-    aPID.SetOutputLimits(0,1000);
+    aPID.SetSampleTime(500-2);
+    aPID.SetOutputLimits(inverterOutputMin,inverterOutputMax);
     gInverterTarget = inverterEmergencyTarget;
     gInverterVoltage = gGridLegValues[ValueVoltage][inverterLeg];
     gInverterPowerFactor = gGridLegValues[ValuePowerFactor][inverterLeg];
@@ -133,6 +138,7 @@ static void inverterSetupInverter()
 
 void inverterSetRealTarget()
 {
+    #if 0
     if( (gBms[0]->basicInfo().getTotalVoltage() < 5000) && (gCurrentPowerCreated > 80)) {
         // If we are below 49V, dont use more than the PV produces
         // If this is more than required, put the rest into the battery.
@@ -140,7 +146,9 @@ void inverterSetRealTarget()
     } else {
         realTarget = max((double)gExcessTarget,gInverterTarget);
     }
-    
+    #else
+        realTarget = max((double)gExcessTarget,gInverterTarget);
+    #endif
 }
 
 void gInverterGridPowerUpdated()
@@ -178,74 +186,50 @@ bool ReadInverter() {
     return true;   
 }
 
-static void inverterLoop()
-{
-    TickType_t previousTime = xTaskGetTickCount();
-    while (true)
-    {        
-        // Seems to work fine...
-        inverterUnlock();
+static void inverterLoop() {
+  TickType_t previousTime = xTaskGetTickCount();
+  while (true) {
+    // Seems to work fine...
+    inverterUnlock();
 
-        if (!inverterLocked())
-        {
-            if (useInverterOutput)
-            {
-                // Here the whole magic happenes :-)
-                // Let's try to match the output power to the the target
-                ReadInverter();
-                aPID.Compute();
-                if (millis() - lastGridUpdateReceived > inverterTimeout)
-                {
-                    // MQTT has a problem it seems...
-                    // So let's go to our  default output
-                    gInverterTarget = inverterEmergencyTarget;
-                    inverterSetRealTarget();
+    if (!inverterLocked()) {
+      // Here the whole magic happenes :-)
+      // Let's try to match the output power to the the target
+      ReadInverter();
+      aPID.Compute();
+      if (millis() - lastGridUpdateReceived > inverterTimeout) {
+        // MQTT has a problem it seems...
+        // So let's go to our  default output
+        gInverterTarget = inverterEmergencyTarget;
+        inverterSetRealTarget();
 
-                    // Come back here in 500ms if no update occured inbetween to update the 
-                    // realTarget.
-                    lastGridUpdateReceived = millis() + 500 - inverterTimeout;                     
-                    //DEBUG_W("Inverter detected timeout. MQTT not running");
-                } 
+        // Come back here in 500ms if no update occured inbetween to update
+        // the realTarget.
+        lastGridUpdateReceived = millis() + 500 - inverterTimeout;
+        // DEBUG_W("Inverter detected timeout. MQTT not running");
+      }
 
-                if ((gInverterPower < realTarget) && (realTarget > 0))  
-                {
-                    pinValue = HIGH;
-                }
-                else
-                {
-                    pinValue = LOW;
-                }
-            }
-            else
-            {
-                // Since we can't read the inverter's output
-                // We try to bring the grid usage down to offset
-                pinValue = gGridSumValues[ValuePower] > inverterOffset ? HIGH : LOW;
-            }
+      // The factor is roughly equivalent to the power
+      // The only real important thing is that it's positive if we
+      // need more power and negative if we need less.
+      if (realTarget > 0) {
+        gVoltageFactor = realTarget - gInverterPower;
+        if (gVoltageFactor > gMaxVoltageFactor) {
+          gVoltageFactor = gMaxVoltageFactor;
+        } else if (gVoltageFactor < gMinVoltageFactor) {
+          gVoltageFactor = gMinVoltageFactor;
         }
-        else
-        {
-            pinValue = LOW;
-        }
-        digitalWrite(INVERTERPIN, pinValue);
-        DBG_SECT(
-            if (Debug.isActive(Debug.DEBUG))
-            {
-                static unsigned long lastPrint = 0;
-                if (millis() - lastPrint > 1000)
-                {
-                    lastPrint = millis();
-                    Debug.print(" Z: ");
-                    Debug.print(gInverterTarget);
-                    Debug.print(" I: ");
-                    Debug.print(gInverterPower);
-                    Debug.print(" C ");
-                    Debug.println(gInverterCurrent);
-                }
-            })
-        vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
-        //vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(10));
+        pinValue = gVoltageFactor > 0 ? HIGH : LOW;
+      } else {
+        // Real Target is negative
+        // Make sure we don't produce anything
+        pinValue = LOW;
+        gVoltageFactor = gMinVoltageFactor;
+      }
     }
+    digitalWrite(INVERTERPIN, pinValue);
+    vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(inverterUpdateInterval));
+  }
 }
 
 static void inverterThradFunc(void *)

@@ -148,7 +148,7 @@ void blynkUpdateInverter()
 
 void blynkUpdateBattery() {
   
-  static uint16_t oldBalancingStatus = 0;
+  static uint16_t oldBalancingStatus = 0xFFFF;
 
   int actPin = 0;
   BMS::CBmsBase *aBms = gBms[actBms - 1];
@@ -212,7 +212,7 @@ void blynkUpdateBattery() {
                          (float)bmsCellInfo.getCellVolt(cell) / 1000.0f);
 
       if (BALANCE_STATUS(oldBalancingStatus, cell) !=
-          BALANCE_STATUS(balanceStatus, cell)) {
+          BALANCE_STATUS(balanceStatus, cell)|| bmsChanged) {
         char txt[8];
         if (BALANCE_STATUS(balanceStatus, cell)) {
           sprintf(txt, "%d »", cell + 1);

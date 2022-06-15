@@ -1,6 +1,11 @@
 #include <WiFi.h>
 #include <netdb.h>
 #include <ModbusTCP.h>
+#include "ButterworthLPF.h"
+#include "debugManagement.h"
+#include "modbusClientManagement.h"
+#include "inverterManagement.h"
+
 
 static const int CONSUMPTION_REGS_OFFSET = 69;               // Modbus Hreg Offset
 static const int NUMCREGS = 6;
@@ -10,14 +15,12 @@ static const int GRID_REGS_OFFSET = 105;               // Modbus Hreg Offset
 static const int NUMGREGS = 3;
 static uint16_t gridRegisters[NUMGREGS];
 
-
+static ButterworthLPF lpfGrid(2, 6, 20);
+static ButterworthLPF lpfBattery(2, 6, 20);
 
 ModbusTCP mb;  //ModbusTCP object
 IPAddress S10Address;
 
-#include "debugManagement.h"
-#include "modbusClientManagement.h"
-#include "inverterManagement.h"
 
 char ginverterShellyValue[STRING_LEN] = "";
 char S10Name[STRING_LEN] = "192.168.100.11";
@@ -88,6 +91,8 @@ void modbusClientLoop(void *) {
         int32_t gridPower = (uint32_t)(consumptionRegisters[5]) << 16 | consumptionRegisters[4];
         //Serial.printf("Battery: %d, Grid %d\n", batteryPower,gridPower);
 
+        gridPower = lpfGrid.update(gridPower);
+        batteryPower = lpfBattery.update(batteryPower);
         gGridSumValues[ValuePower] = gridPower - batteryPower;        
         gInverterGridPowerUpdated();
 

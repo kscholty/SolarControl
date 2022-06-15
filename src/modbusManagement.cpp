@@ -7,19 +7,33 @@
 #include "excessControlManagement.h"
 #include "inverterManagement.h"
 #include "bmsManagement.h"
+#include "adc.h"
 
 
  
 static ModbusTCP *modbusServer = 0;
 
 static bool needsReconnect = true;
-enum REGISTERS {
+enum IREGISTERS {
   REG_BATTERY_VOLTAGE=0,
   REG_BATTERY_CURRENT=1,
   REG_BATTERY_SOC = 2,
   REG_CHARGER_POWER = 3,
   REG_INVERTER_POWER = 4,
-  REG_NUM_REGISTERS
+  REG_NUM_IREGISTERS
+};
+
+enum HREGISTERS {
+  VOLTAGE_OFFSET = 0,
+  PID_P = 1,
+  PID_I = 2,
+  PID_D = 3,
+  INVFACTOR = 4,
+  DEMANDPOWER = 5,
+  MEASUREDPOWER = 6,
+  INVTARGET = 7,
+  STOPCTRL = 8,
+  REG_NUM_HREGISTERS
 };
 
 //The Holding registers are:
@@ -29,9 +43,9 @@ enum REGISTERS {
 // 3: Charge power. Unit: 100mW
 // 4: InverterPower. Unit: 100mW
 
-uint16_t getter(TRegister *reg, uint16_t val)
+uint16_t getterI(TRegister *reg, uint16_t val)
 {
-  REGISTERS regNum = (REGISTERS)(reg->address.address);
+  IREGISTERS regNum = (IREGISTERS)(reg->address.address);
 
   switch (regNum)
   {
@@ -55,6 +69,96 @@ uint16_t getter(TRegister *reg, uint16_t val)
   }
   return UINT16_MAX;
 }
+
+uint16_t getterH(TRegister *reg, uint16_t val)
+{
+  HREGISTERS regNum = (HREGISTERS)(reg->address.address);
+
+  switch (regNum) {
+    case VOLTAGE_OFFSET:
+      return gVoltageOffset;
+      break;
+    case PID_P:
+      return (uint16_t)(Kp * 1000);
+      break;
+    case PID_I:
+      return (uint16_t)(Ki * 1000);
+      break;
+    case PID_D:
+      return (uint16_t)(Kd * 1000);
+      break;
+    case INVFACTOR:
+      return gVoltageFactor;
+      break;
+    case DEMANDPOWER:
+      return (int16_t)gGridSumValues[ValuePower];
+      break;
+    case MEASUREDPOWER:
+      return (int16_t)gInverterPower;
+      break;
+    case INVTARGET:
+      return (int16_t) gInverterTarget;
+      break;
+      case STOPCTRL:
+       return inverterLocked();
+      break;
+      
+    default:
+      return UINT16_MAX;
+  }
+  return UINT16_MAX;
+}
+
+uint16_t setterH(TRegister *reg, uint16_t val)
+{
+
+  HREGISTERS regNum = (HREGISTERS)(reg->address.address);
+
+  DEBUG_I("Client writes %d to %d\n", val,reg->address.address);
+
+  switch (regNum) {
+    case VOLTAGE_OFFSET:
+      gVoltageOffset = val;
+      return gVoltageOffset;
+      break;
+    case PID_P:
+      Kp = val/1000.0;
+      return (uint16_t)(Kp * 1000);
+      break;
+    case PID_I:
+      Ki = val/1000.0;
+      return (uint16_t)(Ki * 1000);
+      break;
+    case PID_D:
+      Kd = val/1000.0;
+      return (uint16_t)(Kd * 1000);
+      break;
+    case INVFACTOR:
+      gVoltageFactor = val;
+      return gVoltageFactor;
+      break;
+    case DEMANDPOWER:
+      return (int16_t)gGridSumValues[ValuePower];
+      break;
+    case MEASUREDPOWER:
+      return (int16_t)gInverterPower;
+      break;
+    case INVTARGET:
+      return (int16_t) gInverterTarget;
+      break;
+    case STOPCTRL:
+      if(val != 0) {
+        inverterLock();
+      } else {
+        inverterUnlock();
+      }
+      return inverterLocked();
+    default:
+      return UINT16_MAX;
+  }
+  return UINT16_MAX;
+}
+
 
 bool onConnect(IPAddress addr) {  
   DEBUG_I("Client connected from %s\n",addr.toString().c_str());
@@ -84,8 +188,11 @@ void modbusReconnect()
   //Config Modbus IP
   modbusServer->server(502);
   modbusServer->cbEnable(true);
-  modbusServer->addIreg(0, 0, REG_NUM_REGISTERS);
-  modbusServer->onGet(IREG(0), getter, REG_NUM_REGISTERS);
+  modbusServer->addIreg(0, 0, REG_NUM_IREGISTERS);
+  modbusServer->addHreg(0, 0, REG_NUM_HREGISTERS);
+  modbusServer->onGet(IREG(0), getterI, REG_NUM_IREGISTERS);
+  modbusServer->onGet(HREG(0), getterH, REG_NUM_HREGISTERS);
+  modbusServer->onSet(HREG(0), setterH, REG_NUM_HREGISTERS);
   modbusServer->onConnect(onConnect);
   modbusServer->onDisconnect(onDisConnect);
 

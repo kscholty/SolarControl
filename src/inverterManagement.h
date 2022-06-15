@@ -63,7 +63,14 @@ extern char gInverterEmergencyTargetValue[NUMBER_LEN];
 extern char gSendExcessToGrid[NUMBER_LEN];
 extern char gInverterUpdateIntervalValue[NUMBER_LEN];
 extern char gInverterLegValue[NUMBER_LEN] ;
+extern char gInverterOutputMax[NUMBER_LEN];
+extern char gInverterOutputMin[NUMBER_LEN];
 
+
+// Values for the PID controller
+extern double Kp;
+extern double Ki;
+extern double Kd;
 
 extern TaskHandle_t gInverterTaskHandle;
 
