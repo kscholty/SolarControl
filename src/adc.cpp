@@ -1,8 +1,8 @@
-#include "adc.h"
 
 #include <Arduino.h>
 #include <driver/adc.h>
 #include <driver/i2s.h>
+#include <driver/dac.h>
 #include <esp_adc_cal.h>
 #include <esp_event.h>
 #include <freertos/ringbuf.h>
@@ -10,13 +10,16 @@
 #include <soc/sens_struct.h>
 #include <soc/syscon_reg.h>
 
-#include "ButterworthLPF.h"
 #include "common.h"
+#include "adc.h"
+
+#include "ButterworthLPF.h"
 #include "debugManagement.h"
 #include "wifimanagement.h"
 
 // i2s number
-#define I2S_NUM (I2S_NUM_0)
+#define I2S_INPUT_NUM (I2S_NUM_0)
+
 // i2s sample rate
 #define I2S_SAMPLE_RATE (16000)
 // i2s data bits
@@ -37,6 +40,10 @@
 // I2S built-in ADC channel
 #define I2S_ADC_CURRENT_CHANNEL ADC1_CHANNEL_0
 #define I2S_ADC_VOLTAGE_CHANNEL ADC1_CHANNEL_5
+
+// Where to write the signal to
+#define DAC_OUTPUT_CHANNEL DAC_CHANNEL_1
+
 
 // how many buffers do we want to use for DMA
 #define ADC_BUFFER_COUNT 4
@@ -87,7 +94,7 @@ ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 // Real value = (value-avg)/maxCal*maxVal
 static const int32_t avgCalibration[2] = {1524, 1630};
 static const int32_t maxCalibration[2] = {1270, 367};
-static const double maxVals[2] = {6.66, 337};
+static const double maxVals[2] = {14, 337};
 
 static int oldValsPos[MaxValueType] = {0, 0, 0};
 
@@ -95,13 +102,17 @@ bool doCalibration = false;
 
 static volatile bool stopAdcUsage = false;
 static esp_adc_cal_characteristics_t *adc_chars;
-
+volatile int32_t gVoltageFactor = 0;
+int32_t gMaxVoltageFactor = 800;
+int32_t gMinVoltageFactor = -800;
+char gVoltageFactorCorrectionOffset[NUMBER_LEN] = "0";
+volatile int32_t gVoltageOffset = 0;
 void characterize() {
   // Characterize ADC at particular atten
   adc_chars = (esp_adc_cal_characteristics_t *)calloc(
       1, sizeof(esp_adc_cal_characteristics_t));
   esp_adc_cal_value_t val_type = esp_adc_cal_characterize(
-      I2S_ADC_UNIT, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, adc_chars);
+      I2S_ADC_UNIT, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1645, adc_chars);
   // Check type of calibration value used to characterize ADC
   if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
     Serial.println("eFuse Vref");
@@ -121,7 +132,7 @@ bool adcInit() {
       I2S_COMM_FORMAT_STAND_I2S,
       ESP_INTR_FLAG_LEVEL1,
       ADC_BUFFER_COUNT,
-      READ_LEN / 2 /*READ_LEN / ((I2S_SAMPLE_BITS + 15 ) / 16 * 2 )*/,
+      8,  /*READ_LEN / 2 */
       true,
       true,
       0/*,
@@ -134,7 +145,7 @@ bool adcInit() {
   adc1_config_channel_atten(I2S_ADC_VOLTAGE_CHANNEL, ADC_ATTEN_DB_11);
 
   // install and start i2s driver
-  i2s_driver_install(I2S_NUM, &i2s_config, ADC_BUFFER_COUNT,
+  i2s_driver_install(I2S_INPUT_NUM, &i2s_config, ADC_BUFFER_COUNT,
                      0 /* &i2s_event_queue */);
 
   // init ADC pad
@@ -151,24 +162,45 @@ bool adcInit() {
   // Channels 0 and 5 with 12db Attenuation and length of 12 bit
   WRITE_PERI_REG(SYSCON_SARADC_SAR1_PATT_TAB1_REG, 0x0F5F0000);
 
-  // The raw ADC data is written in DMA in inverted form. This add an inversion:
+  // The raw ADC data is written in DMA in inverted form. This adds an inversion:
   SET_PERI_REG_MASK(SYSCON_SARADC_CTRL2_REG, SYSCON_SARADC_SAR1_INV);
 
   memset(oldVals, 0, ADC_AVERAGE_COUNT * MaxValueType * sizeof(oldVals[0][0]));
 
+  gVoltageOffset=atoi(gVoltageFactorCorrectionOffset);
+
   xTaskCreate(readAdc, "ADC read", 4096, 0, 6, &readTask);
  
-
   return true;
 }
 
 void readValues(bufStruct *recBuffer, bufStruct *results) {
-  uint16_t *buffer = recBuffer->buffer;
+  uint8_t *buffer = (uint8_t*)recBuffer->buffer;
   size_t read = 0;
-  {
-    // read data from I2S bus, in this case, from ADC.
-    i2s_read(I2S_NUM, buffer, READ_LEN, &read, portMAX_DELAY);
-    recBuffer->count = read / sizeof(uint16_t);
+  int32_t res;
+  uint8_t out;
+  // read data from I2S bus, in this case, from ADC.
+
+  size_t readIndex = 0;
+  while (readIndex < READ_LEN) {
+    if (i2s_read(I2S_INPUT_NUM, buffer + readIndex, 8 * sizeof(uint16_t), &read,
+                 portMAX_DELAY) != ESP_OK) {
+      DEBUG_E("i2sRead failed\n");
+    }
+    res = (*(uint16_t *)(buffer + readIndex + 12));
+    if (!(res & 0x5000)) {
+      res = (*(uint16_t *)(buffer + readIndex + 14));
+    }
+    if (res & 0x5000) {
+      res &= 0xFFF;
+      out = (res * (gVoltageFactor-gVoltageOffset) / 16384) & 0x0FF;
+      dac_output_voltage(DAC_OUTPUT_CHANNEL, out);
+    }
+    readIndex += read;
+  }
+  
+  recBuffer->count = readIndex / sizeof(uint16_t);
+  if (recBuffer->count > 0) {
     splitBuffer(recBuffer, results);
   }
 }
@@ -184,8 +216,11 @@ void readAdc(void *buffer) {
   // switching on the ADC for a reliable start.
   vTaskDelay(5000 / portTICK_RATE_MS);
 
-  i2s_adc_enable(I2S_NUM);
-  i2s_start(I2S_NUM);
+  i2s_adc_enable(I2S_INPUT_NUM);
+  i2s_start(I2S_INPUT_NUM);
+  
+  dac_output_enable(DAC_OUTPUT_CHANNEL);
+  dac_output_voltage(DAC_OUTPUT_CHANNEL, 0);
   stopAdcUsage = false;
   size_t duration = 0, count = 0, res = 0, readt = 0;
   while (!stopAdcUsage) {
@@ -235,9 +270,9 @@ void readAdc(void *buffer) {
 
   DEBUG_I(" Adc task exiting... ");
   // Clean up and exit
-  i2s_adc_disable(I2S_NUM);
-  i2s_stop(I2S_NUM);
-  i2s_driver_uninstall(I2S_NUM);
+  i2s_adc_disable(I2S_INPUT_NUM);
+  i2s_stop(I2S_INPUT_NUM);
+  i2s_driver_uninstall(I2S_INPUT_NUM);
   readTask = 0;
   vTaskDelete(xTaskGetCurrentTaskHandle());
 }
