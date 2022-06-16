@@ -98,6 +98,7 @@ bool CBms<BMS_IMPL>::readHighFrequentData() {
   const uint8_t *request = 0;
   size_t length = 0;
   bool res = mBmsImpl.getHighFrequRequest(&request, &length);
+  debugD("BMS: Sending highFrequRequest");
   if (res && length && request) {
     return handleRequest(request, length);
   }
@@ -110,6 +111,7 @@ bool CBms<BMS_IMPL>::readLowFrequentData() {
   const uint8_t  *request = 0;
   size_t length = 0;
   bool res = mBmsImpl.getLowFrequRequest(&request, &length);
+  debugD("BMS: Sending lowFrequRequest");
   if (res && length && request) {
     return handleRequest(request, length);
   }
@@ -125,7 +127,7 @@ bool CBms<BMS_IMPL>::handleRequest(const uint8_t *request, size_t length) {
   size_t messageSize = 0;
   uint8_t *answer = 0;
 
-
+  debugD("Sending request with size %d\n",length);
   if (!mStreamMutex ||
       xSemaphoreTake(mStreamMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     while (mCommStream.read() != -1)
@@ -161,7 +163,7 @@ size_t CBms<BMS_IMPL>::readAnswerMessage(uint8_t **answer) {
   *answer = messagebuffer;
   size_t messagePointer = 0;
   toRead = mBmsImpl.messageHeaderSize();
-
+  
   do {
     read = mCommStream.readBytes(messagebuffer + messagePointer, toRead);
     toRead -= read;

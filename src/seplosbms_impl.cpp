@@ -1,5 +1,5 @@
 
-
+#include "debugManagement.h"
 #include "seplosbms_impl.h"
 
 
@@ -15,7 +15,7 @@ constexpr const char*  SeplosBms::footerMask;
 
 bool SeplosBms::setup() 
 {
-    Serial.println("Setting up Seplos BMS");
+    debugI("Setting up Seplos BMS");
     return false;
 }
 
@@ -23,7 +23,7 @@ bool SeplosBms::getLowFrequRequest( const uint8_t **request,size_t *length) cons
  {
      // Request warnings and stuff....
      //"~ 2 0 0 0 4 6 4 4 E 0 0 2 0 0 F D 3 5 $"
-    static const uint8_t message[] = {'~',0x32,0x30,0x30,0x30,0x34,0x36,0x34,0x34,0x45,0x30,0x30,0x32,0x30,0x30,0x46,0x44,0x33,0x35,'$'};
+    static const uint8_t message[] = {'~',0x32,0x30,0x30,0x30,0x34,0x36,0x34,0x34,0x45,0x30,0x30,0x32,0x30,0x30,0x46,0x44,0x33,0x35,0x0D};
     *request = message;
     *length = sizeof(message);
     return true;
@@ -34,7 +34,7 @@ bool SeplosBms::getHighFrequRequest(const uint8_t **request,size_t *length) cons
     // Telemetry CID2 = 0x42 request for address 0;
     // The resault will give us cell voltages
     // "~  2  0  0  0  4  6  4  2  E  0  0  2  0  0  F  D  3  7  $ "    
-    static const uint8_t message[] = {'~',0x32,0x30,0x30,0x30,0x34,0x36,0x34,0x32,0x45,0x30,0x30,0x32,0x30,0x31,0x46,0x44,0x33,0x37,'$'};
+    static const uint8_t message[] = {'~',0x32,0x30,0x30,0x30,0x34,0x36,0x34,0x32,0x45,0x30,0x30,0x32,0x30,0x30,0x46,0x44,0x33,0x37,0x0D};
     *request = message;
     *length = sizeof(message);
     return true;
@@ -59,8 +59,10 @@ size_t SeplosBms::getBodySize(const uint8_t *messagebuffer,size_t length) const
 
     //"~20%2hhx46%2hhx%1hhx%3hhx"; "~20 ADR 46 CID2 LCHECKSUM LENID"
     if((sscanf((const char*)messagebuffer,headerMask,&addr,&CID2,&lChecksum,&lenid) == 4)&& (calcLChecksum(lenid) == lChecksum)) {
+        debugD("Seplos: Values in header are: addr %d, CID2 %d,  lchecksum%d, lenid %d",addr,CID2,lChecksum,lenid);
         return lenid+5; // It's DATA + CHECKSUM+ + EOI
     }
+    debugE("Could not parse seplos header %s",messagebuffer);
     return 0;
 }
 
@@ -68,15 +70,17 @@ bool  SeplosBms::processHighFrequMessage(const uint8_t *answer, size_t messageSi
     
     char const *scanPos = (const char*)answer+messageHeaderSize()+4;
     uint8_t count;
-    uint16_t value;
-    
+    uint16_t value;    
+    debugI("Seplos processing highFrequ message %s\n",answer);
     sscanf(scanPos,"%2hhx",&count);
     scanPos += 2;
     cellInfo->setNumCells(count);
-    
+    debugI("cells %d\n",count);
     for(int i=0;i<count;++i) {
         uint16_t voltage;
         sscanf(scanPos,"%4hx",&voltage);
+        debugD("Voltage %d: %d\n",i,voltage);
+        cellInfo->setVoltage(i,voltage);
         scanPos += 4;
     }
     sscanf(scanPos,"%2hhx",&count);
@@ -88,7 +92,7 @@ bool  SeplosBms::processHighFrequMessage(const uint8_t *answer, size_t messageSi
         scanPos += 4;
         temp -= 2731;
         if(i<3) basicInfo->temps[i] = temp;
-        Serial.printf("Temp %d: %d\n",i,temp);
+        debugD("Temp %d: %d\n",i,temp);
     }
 
     // current
@@ -118,7 +122,7 @@ bool  SeplosBms::processHighFrequMessage(const uint8_t *answer, size_t messageSi
     // SOC
     sscanf(scanPos,"%4hx",&value);
     scanPos += 4;
-    basicInfo->stateOfCharge = value;    
+    basicInfo->stateOfCharge = value/10;    
 
     // Rated capacity Skip
     //sscanf(scanPos,"%4hx",&value);
@@ -277,7 +281,7 @@ bool  SeplosBms::processLowFrequMessage(const uint8_t *answer, size_t messageSiz
 
 bool SeplosBms::processMessage(const uint8_t *answer, size_t messageSize, BmsBasicInfo_t *basicInfo, BmsCellInfo_t *cellInfo) 
 {
-    Serial.printf("Seplos processing message with size %d\n", messageSize);
+    debugD("Seplos processing message with size %d\n", messageSize);
     if(messageSize == 168) {
         return processHighFrequMessage(answer,messageSize,basicInfo,cellInfo);
     }

@@ -18,7 +18,7 @@ char gBmsUpdateIntervalValue[NUMBER_LEN] = "3000";
 char gBmsType[bmsCount][STRING_LEN] = {"None", "None", "None"};
 
 static BMS_TYPE bmsTypes[bmsCount] = {NONE,NONE,NONE};
-bool gBmsDisconnect = false;
+bool gBmsDisconnect = true;
 bool gBmsUpdated = false;
 
 static TaskHandle_t taskId;
