@@ -15,8 +15,8 @@ static const int GRID_REGS_OFFSET = 105;               // Modbus Hreg Offset
 static const int NUMGREGS = 3;
 static uint16_t gridRegisters[NUMGREGS];
 
-static ButterworthLPF lpfGrid(2, 6, 20);
-static ButterworthLPF lpfBattery(2, 6, 20);
+static ButterworthLPF lpfGrid(2, 8, 20);
+static ButterworthLPF lpfBattery(2, 8, 20);
 
 ModbusTCP mb;  //ModbusTCP object
 IPAddress S10Address;
