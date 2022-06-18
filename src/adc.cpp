@@ -92,9 +92,9 @@ ICACHE_RAM_ATTR static double avgValueSquareSum[MaxValueType] = {0.0, 0.0, 0.0};
 ICACHE_RAM_ATTR static double oldVals[ADC_AVERAGE_COUNT][MaxValueType];
 
 // Real value = (value-avg)/maxCal*maxVal
-static const int32_t avgCalibration[2] = {1524, 1630};
-static const int32_t maxCalibration[2] = {1270, 367};
-static const double maxVals[2] = {14, 337};
+static const int32_t avgCalibration[2] = {1524, 1629};
+static const int32_t maxCalibration[2] = {1270, 360};
+static const double maxVals[2] = {13.2, 337};
 
 static int oldValsPos[MaxValueType] = {0, 0, 0};
 
@@ -107,6 +107,7 @@ int32_t gMaxVoltageFactor = 800;
 int32_t gMinVoltageFactor = -800;
 char gVoltageFactorCorrectionOffset[NUMBER_LEN] = "0";
 volatile int32_t gVoltageOffset = 0;
+
 void characterize() {
   // Characterize ADC at particular atten
   adc_chars = (esp_adc_cal_characteristics_t *)calloc(
@@ -114,12 +115,16 @@ void characterize() {
   esp_adc_cal_value_t val_type = esp_adc_cal_characterize(
       I2S_ADC_UNIT, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1645, adc_chars);
   // Check type of calibration value used to characterize ADC
-  if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-    Serial.println("eFuse Vref");
-  } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-    Serial.println("Two Point");
-  } else {
-    Serial.println("Default");
+  Serial.printf("ADC Vref Voltage %d type: ", adc_chars->vref);
+  switch (val_type) {
+    case ESP_ADC_CAL_VAL_EFUSE_VREF:
+      Serial.println("eFuse Vref");
+      break;
+    case ESP_ADC_CAL_VAL_EFUSE_TP:
+      Serial.println("Two Point");
+      break;
+    default:
+      Serial.println("Default");
   }
 }
 
@@ -317,24 +322,18 @@ void calibration(size_t iterations, bufStruct *i2s_read_buff,
     counts += results[CURRENT].count;
     calculateCalibrationValues(&results[CURRENT], min[CURRENT], max[CURRENT],
                                avg[CURRENT], offsets[CURRENT]);
-    if (i % SUBLOOP == 0) {
-      avgMax[CURRENT] += max[CURRENT];
-      avgMin[CURRENT] += min[CURRENT];
-      avgAvg[CURRENT] += avg[CURRENT] / (double)counts;
-      max[CURRENT] = 0;
-      min[CURRENT] = 4096;
-      avg[CURRENT] = 0;
-      counts = 0;
-    }
+    
     calculateCalibrationValues(&results[VOLTAGE], min[VOLTAGE], max[VOLTAGE],
                                avg[VOLTAGE], offsets[VOLTAGE]);
     if (i % SUBLOOP == 0) {
-      avgMax[VOLTAGE] += max[VOLTAGE];
-      avgMin[VOLTAGE] += min[VOLTAGE];
-      avgAvg[VOLTAGE] += avg[VOLTAGE] / (double)counts;
-      max[VOLTAGE] = 0;
-      min[VOLTAGE] = 4096;
-      avg[VOLTAGE] = 0;
+      for(int channel = CURRENT;channel<2;++channel) {
+      avgMax[channel] += max[channel];
+      avgMin[channel] += min[channel];
+      avgAvg[channel] += avg[channel] / (double)counts;
+      max[channel] = 0;
+      min[channel] = 4096;
+      avg[channel] = 0;   
+      }
       counts = 0;
     }
   }

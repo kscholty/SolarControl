@@ -15,8 +15,8 @@ static const int GRID_REGS_OFFSET = 105;               // Modbus Hreg Offset
 static const int NUMGREGS = 3;
 static uint16_t gridRegisters[NUMGREGS];
 
-static ButterworthLPF lpfGrid(2, 8, 20);
-static ButterworthLPF lpfBattery(2, 8, 20);
+//static ButterworthLPF lpfGrid(2, 20, 100);
+//static ButterworthLPF lpfBattery(2, 20, 100);
 
 ModbusTCP mb;  //ModbusTCP object
 IPAddress S10Address;
@@ -51,21 +51,61 @@ bool resolveHostname(char hostname[STRING_LEN]) {
   return false;
 }
 
-void modbusClientInit() { 
-
-    if(!isInit) {
-        isInit = resolveHostname(S10Name);          
-        if(isInit) {
-          mb.client();
-          mb.connect(S10Address,502);  // Try to connect if no connection  
-        }
+void modbusClientInit() {
+  if (!isInit) {
+    isInit = resolveHostname(S10Name);
+    if (isInit) {
+      mb.client();
+      mb.connect(S10Address, 502);  // Try to connect if no connection
     }
+  }
 }
 
-void modbusClientLoop(void *) {
+static bool modbusGridTransactionCallback(
+    Modbus::ResultCode event, uint16_t transactionId,
+    void* data) {                     // Modbus Transaction callback
+  if (event != Modbus::EX_SUCCESS) {  // If transaction got an error
+    debugE("Modbus grid transaction failed: %02X\n",
+           event);  // Display Modbus error code
+  } else {
+    gGridLegValues[ValuePower][0] = (int16_t)gridRegisters[0];
+    gGridLegValues[ValuePower][1] = (int16_t)gridRegisters[1];
+    gGridLegValues[ValuePower][2] = (int16_t)gridRegisters[2];    
+  }
+  return true;
+}
+
+static bool modbusConsumptionTransactionCallback(
+    Modbus::ResultCode event, uint16_t transactionId,
+    void* data) {                     // Modbus Transaction callback
+  if (event != Modbus::EX_SUCCESS) {  // If transaction got an error
+    debugE("Modbus consumption transaction failed: %02X\n",
+           event);  // Display Modbus error code
+  } else {
+    // Serial.printf("0x%x 0x%x  0x%x 0x%x  0x%x
+    // 0x%x\n",registers[0],registers[1],registers[2],registers[3],registers[4],registers[5]);
+    int32_t batteryPower =
+        (uint32_t)(consumptionRegisters[1]) << 16 | consumptionRegisters[0];
+    int32_t gridPower =
+        (uint32_t)(consumptionRegisters[5]) << 16 | consumptionRegisters[4];
+    // Serial.printf("Battery: %d, Grid %d\n", batteryPower,gridPower);
+
+
+   // int32_t gridPower = lpfGrid.update(gridPowerRaw);
+   // int32_t batteryPower = lpfBattery.update(batteryPowerRaw);
+
+    //debugD("gP: %d (%d) bP: %d (%d)\n",gridPower,gridPowerRaw, batteryPower, batteryPowerRaw);
+
+    gGridSumValues[ValuePower] = gridPower - batteryPower;
+    gInverterGridPowerUpdated();
+  }
+  return true;
+}
+
+void modbusClientLoop(void*) {
   static unsigned long counter = 0;
   static const unsigned long RESOLVEDELAY = (1000 / delayMs * 60 * 15);
-  uint16_t transG= 0;
+  uint16_t transG = 0;
   TickType_t previousTime = xTaskGetTickCount();
   while (true) {
     vTaskDelayUntil(&previousTime, pdMS_TO_TICKS(delayMs));
@@ -73,37 +113,18 @@ void modbusClientLoop(void *) {
       modbusClientInit();
     } else {
       if (mb.isConnected(S10Address)) {  // Check if connection to Modbus Slave
-                                         // is established
-        uint16_t transC =
-            mb.readHreg(S10Address, CONSUMPTION_REGS_OFFSET, consumptionRegisters,
-                        NUMCREGS);  // Initiate Read Hreg from Modbus Server
-            transG = mb.readHreg(S10Address, GRID_REGS_OFFSET, gridRegisters,
-                        NUMGREGS); // Initiate Reading Grid Counter
-        while (mb.isTransaction(transC)) {  // Check if transaction is active          
-          vTaskDelay(pdMS_TO_TICKS(5));
+                                         // is established        
+        uint16_t transG = mb.readHreg(
+            S10Address, GRID_REGS_OFFSET, gridRegisters, NUMGREGS,
+            modbusGridTransactionCallback);  // Initiate Reading Grid Counter
+        uint16_t transC = mb.readHreg(
+            S10Address, CONSUMPTION_REGS_OFFSET, consumptionRegisters, NUMCREGS,
+            modbusConsumptionTransactionCallback);  // Initiate Read Hreg from
+                                                    // Modbus Server   
+        do {                                 // Check if transaction is active
+          vTaskDelay(pdMS_TO_TICKS(2));
           mb.task();
-        }
-        
-        // At this point res is filled with response value
-        bool powerUpdated = false;
-        //Serial.printf("0x%x 0x%x  0x%x 0x%x  0x%x 0x%x\n",registers[0],registers[1],registers[2],registers[3],registers[4],registers[5]);
-        int32_t batteryPower = (uint32_t)(consumptionRegisters[1]) << 16 | consumptionRegisters[0];
-        int32_t gridPower = (uint32_t)(consumptionRegisters[5]) << 16 | consumptionRegisters[4];
-        //Serial.printf("Battery: %d, Grid %d\n", batteryPower,gridPower);
-
-        gridPower = lpfGrid.update(gridPower);
-        batteryPower = lpfBattery.update(batteryPower);
-        gGridSumValues[ValuePower] = gridPower - batteryPower;        
-        gInverterGridPowerUpdated();
-
-        while (mb.isTransaction(transG)) {  // Check if transaction is active
-          vTaskDelay(pdMS_TO_TICKS(5));
-          mb.task();         
-        }
-        gGridLegValues[ValuePower][0] = (int16_t)gridRegisters[0];
-        gGridLegValues[ValuePower][1] = (int16_t)gridRegisters[1];
-        gGridLegValues[ValuePower][2] = (int16_t)gridRegisters[2];
-
+        } while (mb.isTransaction(transC) || mb.isTransaction(transG));
       } else {
         mb.connect(S10Address, 502);  // Try to connect if no connection
         mb.task();

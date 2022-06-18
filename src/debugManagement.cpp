@@ -17,10 +17,17 @@ void processCmdRemoteDebug() {
 
 	String lastCmd = Debug.getLastCommand();
 
-	if (lastCmd == "calibrate") {
-		
-		debugA("Clibrating Current sensor");
+	String options = "";
+	uint8_t pos = lastCmd.indexOf(" ");
+	if (pos > 0) {
+		options = lastCmd.substring(pos + 1);
+	}
+
+	if (lastCmd == "calibrate") {		
+		debugA("Calibrating Current and voltage sensor");
 		doCalibration = true;
+	} else 	if(lastCmd.startsWith("dummy ")) {		
+		debugA("Dummy command with option %s\n",options.c_str());		
 	} 
 }
 
@@ -36,8 +43,7 @@ void debugSetup() {
 	//Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
 	Debug.showColors(true); // Colors
 
-    String helpCmd = "calibrate - calculate calkibration values\r\n";
-
+    String helpCmd = "calibrate - calculate calibration values\r\n";
 
 	Debug.setHelpProjectsCmds(helpCmd);
 	Debug.setCallBackProjectCmds(&processCmdRemoteDebug);
