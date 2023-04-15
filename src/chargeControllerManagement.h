@@ -14,7 +14,7 @@ enum ChargerValues_t
 {
     PV_CURRENT = 0,
     PV_VOLTAGE,
-    PV_POWER,
+    PV_POWER,     //32Bit
     BATTERY_TEMP,
     BATTERY_EXTERNAL_TEMP,
     BATTERY_VOLTAGE,
@@ -29,6 +29,27 @@ enum ChargerValues_t
     CHARGER_READ_ERROR,
     CHARGER_ARRAY_SIZE
 };
+
+
+ low = buffer[IX++];
+                high = buffer[IX++];
+                chargerValues[index][BATTERY_CHARGE_POWER] = MK_32(low, high);
+                DBG_SECT(
+                    rprintD("PV Power: ");
+                    rprintDln(chargerValues[index][PV_POWER]);)
+                if (chargerValues[index][BATTERY_CHARGE_CURRENT] > 0)
+                {
+                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = chargerValues[index][BATTERY_CHARGE_POWER] * 100 / chargerValues[index][BATTERY_CHARGE_CURRENT];
+                }
+                else
+                {
+                        chargerValues[index][BATTERY_CHARGE_VOLTAGE] = 0;
+                }
+                DBG_SECT(
+                    rprintD("Battery Charge Voltage: ");
+                    rprintDln(chargerValues[index][PV_POWER]);)
+                returnVal = true;
+
 
 enum ChargerFlags_t
 {
